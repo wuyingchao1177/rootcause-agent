@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+
+# 数据与结果
+data/
+output/
+results/
+*.parquet
+*.csv
+
+# 环境与密钥
+.env
+*.key
+auth.json
+deepseek_key
+
+# IDE
+.idea/
+.vscode/
+.DS_Store
+
+# 测试产物
+.pytest_cache/
+.coverage
+htmlcov/

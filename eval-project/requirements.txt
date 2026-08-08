@@ -1,0 +1,12 @@
+# 核心评测依赖
+pandas>=2.0
+pyarrow>=14
+logdx-ci>=0.1
+drain3>=0.9
+# 竞品（可选，缺省时对应竞品标注不可运行）
+rtk-bin  # 或从 https://github.com/rtk-ai/rtk 安装
+headroom-ai[all]>=0.33
+# RCAEval 官方 baseline（可选）
+causal-learn>=0.1
+scikit-learn>=1.3
+networkx>=3.0

@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rootcause-agent"
+version = "1.0.0"
+description = "Token-efficient root cause analysis agent: log/code compression + LLM reasoning"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "rootcause-agent contributors" }]
+keywords = ["root-cause-analysis", "llm", "log-compression", "token-optimization", "rca", "microservices"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Topic :: Software Development :: Libraries :: Application Frameworks",
+]
+dependencies = []
+
+[project.optional-dependencies]
+llm = ["langchain-openai>=0.1", "langchain-core>=0.1"]
+benchmark = [
+    "pandas>=2.0",
+    "pyarrow>=14",
+    "drain3>=0.9",
+    "logdx-ci>=0.1",
+    "headroom-ai[all]>=0.33",
+]
+dev = ["pytest>=7", "pytest-cov"]
+
+[tool.setuptools]
+packages = ["common", "locator", "benchmark"]
+
+[tool.setuptools.package-data]
+benchmark = ["*.json"]
+samples = ["*.json", "*.py"]
