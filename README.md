@@ -45,22 +45,26 @@ LLM 定位根因不需要原始日志 —— 需要的是**保真的关键信号
 ```bash
 pip install -e .            # 或 pip install -e .[llm] 启用 LLM 定位
 
-# 0. 一键 demo（无需 LLM，看压缩效果）
+# 0. LLM 配置（环境变量，OpenAI 兼容服务通用）
+export DEEPSEEK_API_KEY=sk-...                # API Key（也可用 LLM_API_KEY）
+export LLM_BASE_URL=https://api.deepseek.com/v1  # 默认 DeepSeek；可切换 OpenAI/vLLM/Ollama/火山方舟
+export LLM_MODEL=deepseek-chat                # 默认模型名
+
+# 1. 一键 demo（无需 LLM，看压缩效果）
 python3 examples/demo.py                # 内置示例日志
 python3 examples/demo.py /path/to/app.log
 
-# 1. 日志压缩（纯本地，无 LLM）
+# 2. 日志压缩（纯本地，无 LLM）
 from common.log_compressor import build_analysis_view
 log_lines = open("app.log", encoding="utf-8").read().splitlines()
 view = build_analysis_view(log_lines)     # 10 万行 → 数百行信号视图
 
-# 2. 根因定位（需 LLM API Key）
+# 3. 根因定位
 from locator.agent import locate_root_cause
 result = locate_root_cause(
     alert_message="Service A latency spike",
     log_file="app.log",
     code_dir="src/",
-    api_key="sk-...",          # 或设置环境变量 DEEPSEEK_API_KEY
 )
 print(result.root_cause)       # 根因链 + 证据行
 ```

@@ -25,14 +25,24 @@ from common.code_compressor import compress_code
 
 
 def get_llm():
+    """创建 LLM 实例（OpenAI 兼容）。
+
+    配置（环境变量优先，兼容旧的文件配置）：
+      DEEPSEEK_API_KEY / LLM_API_KEY — API Key（默认兼容 ~/.hermes/deepseek_key 文件）
+      LLM_BASE_URL — 服务端点（默认 https://api.deepseek.com/v1，可切换任意 OpenAI 兼容服务）
+      LLM_MODEL    — 模型名（默认 deepseek-chat）
+    """
     from langchain_openai import ChatOpenAI
-    key_path = os.path.expanduser("~/.hermes/deepseek_key")
-    key = ""
-    if os.path.exists(key_path):
-        with open(key_path) as f:
-            key = f.read().strip()
-    return ChatOpenAI(model="deepseek-chat", temperature=0, max_tokens=1024,
-                      api_key=key, base_url="https://api.deepseek.com/v1")
+    key = os.environ.get("DEEPSEEK_API_KEY", "") or os.environ.get("LLM_API_KEY", "")
+    if not key:
+        key_path = os.path.expanduser("~/.hermes/deepseek_key")
+        if os.path.exists(key_path):
+            with open(key_path) as f:
+                key = f.read().strip()
+    base_url = os.environ.get("LLM_BASE_URL", "https://api.deepseek.com/v1")
+    model = os.environ.get("LLM_MODEL", "deepseek-chat")
+    return ChatOpenAI(model=model, temperature=0, max_tokens=1024,
+                      api_key=key, base_url=base_url)
 
 
 # ─── Baseline: 全量输入 ─────────────────────────────────────────

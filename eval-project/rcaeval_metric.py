@@ -6,8 +6,10 @@
 """
 import argparse, glob, json, os, re, subprocess, sys
 
-def llm_locate(context: str, problem: str, api_key: str) -> str:
-    body = json.dumps({"model": "deepseek-chat", "temperature": 0, "max_tokens": 100,
+def llm_locate(context: str, problem: str, api_key: str,
+               base_url: str = "https://api.deepseek.com/v1",
+               model: str = "deepseek-chat") -> str:
+    body = json.dumps({"model": model, "temperature": 0, "max_tokens": 100,
                        "messages": [{"role": "user", "content":
                            "你是微服务根因定位专家。给定故障期间指标摘要，判断根因服务。\n"
                            f"故障场景: {problem}\n\n{context}\n\n只输出 JSON: "
@@ -18,7 +20,7 @@ def llm_locate(context: str, problem: str, api_key: str) -> str:
         bf = tf.name
     try:
         r = subprocess.run(["curl", "-fsSL", "-m", "90", "-X", "POST",
-                            "https://api.deepseek.com/v1/chat/completions",
+                            f"{base_url}/chat/completions",
                             "-H", "Content-Type: application/json",
                             "-H", f"Authorization: Bearer {api_key}", "-d", f"@{bf}"],
                            capture_output=True, timeout=120)
@@ -60,7 +62,12 @@ def main():
     ap.add_argument("--data-dir", required=True)
     ap.add_argument("--out", default="results/ours.json")
     ap.add_argument("--limit", type=int, default=0, help="0=全量")
-    ap.add_argument("--api-key", default=os.environ.get("DEEPSEEK_API_KEY", ""))
+    ap.add_argument("--api-key", default=os.environ.get("DEEPSEEK_API_KEY", ""),
+                    help="LLM API Key（默认读 DEEPSEEK_API_KEY 环境变量）")
+    ap.add_argument("--base-url", default=os.environ.get("LLM_BASE_URL", "https://api.deepseek.com/v1"),
+                    help="OpenAI 兼容服务端点（默认 DeepSeek，可切换 vLLM/Ollama/方舟等）")
+    ap.add_argument("--model", default=os.environ.get("LLM_MODEL", "deepseek-chat"),
+                    help="模型名（默认 deepseek-chat）")
     args = ap.parse_args()
 
     cases = sorted(glob.glob(f"{args.data_dir}/*/*/metrics.csv"))
@@ -74,7 +81,8 @@ def main():
         inj = open(os.path.join(d0, "inject_time.txt")).read().strip()
         mt = summarize_metrics_csv(p, inj)
         ctx = f"## 指标异常摘要（根因第一依据）\n{mt[:800]}\n\n提示：根因服务是指标异常最显著的服务。"
-        pred = llm_locate(ctx, f"RCAEval case={svc_fault}_{num}", args.api_key)
+        pred = llm_locate(ctx, f"RCAEval case={svc_fault}_{num}", args.api_key,
+                          base_url=args.base_url, model=args.model)
         hit = pred == svc or svc in pred or pred in svc
         ok += 1 if hit else 0
         results.append({"case": f"{svc_fault}_{num}", "gt": svc, "pred": pred, "ok": hit})
