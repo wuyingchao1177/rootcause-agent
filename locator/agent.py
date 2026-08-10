@@ -151,7 +151,7 @@ def analyze_root_cause(problem: dict, log_analysis: dict,
                        code_contexts: list[dict], runtime_data: str = "") -> str:
     """让 LLM 综合所有压缩上下文输出根因分析。
 
-    对齐自研护栏设计（内部溯源协议的踩坑沉淀）：
+    自研护栏设计：
     - 证据链：每条结论引用具体日志/代码证据
     - 置信度分级：结论标注 高/中/低，推断与有据结论显式分开
     - errno 语义：空结果先看 errno（0=业务空，非0=故障），禁止把"业务空"误判为"接口故障"
@@ -231,7 +231,7 @@ def locate_root_cause(problem_text: str, log_lines: list[str],
     problem = parse_problem(problem_text)
     # L1
     log_analysis = analyze_logs(log_lines)
-    # 短路求值（对齐自研溯源协议 Step 2.6：最便宜的先跑，命中即收工）：
+    # 短路求值（最便宜的先跑，命中即收工）：
     # 日志压缩后错误信号直接命中（异常类明确且无代码疑问）→ 跳过 L2 代码定位，直接 L3
     short_circuited = False
     code_contexts = []
