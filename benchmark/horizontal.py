@@ -42,7 +42,14 @@ def get_llm():
 
 
 def make_prompt(case: dict, log_text: str, code_text: str) -> str:
-    return f"## 问题\n{case['problem']}\n\n## 日志\n{log_text}\n\n## 代码\n{code_text}"
+    return (f"## 问题\n{case['problem']}\n\n"
+            f"## 日志\n{log_text}\n\n"
+            f"## 代码\n{code_text}\n\n"
+            f"请给出根因分析（结构）：\n"
+            f"① 根因链（触发条件→直接原因→根本原因）② 关键证据（引用具体日志行/代码行）"
+            f"③ 定位置信度（高/中/低，推断与有据结论分开）④ 修复建议\n"
+            f"每条结论必须引用具体证据，禁止无证据断言；若结论依赖外部配置/规则"
+            f"（QLE 表达式、策略配置等），标注哪些已直接验证、哪些未直接验证、如何人工核实")
 
 
 def _cf_sources(code_files) -> list[tuple[str, str]]:
@@ -64,13 +71,19 @@ def run_ours(case: dict) -> dict:
     log_text = format_compressed_log(compressed)
 
     code_text = ""
-    for name, src in _cf_sources(case["code_files"])[:2]:
+    # dict 格式（已压缩片段）传全部；list 格式（原始路径）限前 2 防超
+    sources = _cf_sources(case["code_files"])
+    if isinstance(case["code_files"], dict):
+        sources = sources[:6]
+    else:
+        sources = sources[:2]
+    for name, src in sources:
         try:
             code_text += compress_code(src, file_path=name, keywords=case["keywords"]) + "\n"
         except Exception:
             pass
 
-    prompt = make_prompt(case, log_text[:6000], code_text[:6000])
+    prompt = make_prompt(case, log_text[:12000], code_text[:30000])
     return {"prompt": prompt, "input_chars": len(prompt), "method": "ours",
             "log_reduction": compressed["reduction_rate"]}
 
@@ -79,7 +92,12 @@ def run_full(case: dict) -> dict:
     """Baseline: 全量输入。"""
     log_text = "\n".join(case["logs"])
     code_text = ""
-    for name, src in _cf_sources(case["code_files"])[:2]:
+    sources = _cf_sources(case["code_files"])
+    if isinstance(case["code_files"], dict):
+        sources = sources[:6]
+    else:
+        sources = sources[:2]
+    for name, src in sources:
         code_text += f"--- {name} ---\n{src}\n"
     prompt = make_prompt(case, log_text, code_text)
     return {"prompt": prompt, "input_chars": len(prompt), "method": "baseline"}
