@@ -1,6 +1,6 @@
 # RootCause Agent v4 重构蓝图
 
-> 基于自研内部溯源 skill（Obsidian 02 文档）的设计思想，
+> 基于自研内部 skill 的设计思想，
 > 把"字段追溯方案"泛化为"根因定位诊断协议"。
 > 状态：等待用户提供 log_search.py + 真实 APM 日志后实施。
 
