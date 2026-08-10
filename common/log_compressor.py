@@ -154,12 +154,17 @@ def _is_placeholder_row(line: str) -> bool:
     if not tokens:
         return False  # 有符号但无 token —— 保守不删
     _PH = {"null", "none", "n/a", "na", "-", "--", "[uri not found]",
-           "[not found]", "[]", "{}", "undefined"}
-    return all(t.lower() in _PH or re.fullmatch(r'\[[^\]]*\]', t) for t in tokens)
+           "[not found]", "[]", "{}"}
+    # 注意：有内容的 [xxx]（如 [front-end] [ undefined, undefined ]）不算占位 ——
+    # 是真实业务日志（Sock Shop 数据缺失的故障信号），误删会破坏异常上下文窗口
+    return all(t.lower() in _PH for t in tokens)
 
 
 def is_key_line(line: str) -> bool:
     """ERROR/异常行，或含业务信号的行。"""
+    # 字段标记行（字段[xxx]: value —— 溯源/构建工具提取的业务字段值）强制为关键行
+    if re.search(r'字段\[[^\]]+\]', line):
+        return True
     return bool(KEY_LINE_RE.search(line)) or bool(BUSINESS_SIGNAL_RE.search(line))
 
 
@@ -260,8 +265,19 @@ def compress_log(lines: list[str], max_lines: int = 200000,
 
 
 def format_compressed_log(compressed: dict, max_template_chars: int = 250,
-                          noise_limit: int = 100) -> str:
-    """格式化压缩日志。"""
+                          noise_limit: int = 100, tail_chars: int = 120) -> str:
+    """格式化压缩日志。长行截断时截头保尾（业务字段值常在 JSON 长行尾部，如 level_type/cheat）。"""
+    def _clip(s: str) -> str:
+        if len(s) <= max_template_chars:
+            return s
+        head = s[:max_template_chars]
+        # 尾部含业务字段值特征才保留（字段标记 或 键=数字值，等号形式）；
+        # JSON 冒号键值（"timestamp":1732...）与异常堆栈尾部不保留 —— 避免受害方连锁症状误导
+        tail = s[-tail_chars:]
+        if re.search(r'字段\[|=\s*-?\d+', tail):
+            return f"{head} ...{tail}"
+        return head
+
     parts = []
     stats = compressed["level_stats"]
     parts.append(f"Log Summary: {stats.get('ERROR',0)} errors, {stats.get('WARN',0)} warnings, "
@@ -273,21 +289,21 @@ def format_compressed_log(compressed: dict, max_template_chars: int = 250,
         parts.append("[关键异常/业务信号]")
         for t, count, level in key:
             prefix = f"[x{count}]" if count > 1 else "    "
-            parts.append(f"{prefix} {t[:max_template_chars]}")
+            parts.append(f"{prefix} {_clip(t)}")
 
     ctx = compressed.get("context_lines", [])
     if ctx:
         parts.append("")
         parts.append("[异常上下文(前因后果)]")
         for line in ctx[:60]:
-            parts.append(f"  {line[:max_template_chars]}")
+            parts.append(f"  {_clip(line)}")
 
     noise = compressed.get("noise_templates", [])
     if noise:
         parts.append("")
         parts.append("[普通日志模板]")
         for t, count in noise[:noise_limit]:
-            parts.append(f"[x{count}] {t[:max_template_chars]}")
+            parts.append(f"[x{count}] {_clip(t)}")
 
     tail = compressed.get("tail_lines", [])
     if tail:

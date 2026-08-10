@@ -84,7 +84,9 @@ def main():
     from rcaeval_metric import llm_locate  # 复用 LLM 调用
     import pandas as pd
 
-    cases = sorted(glob.glob(f"{args.data_dir}/*/*/metrics.csv"))
+    # RE1-OB/RE2 用 metrics.csv；RE1-SS 用 data.csv（Sock Shop 数据集结构差异）
+    cases = sorted(glob.glob(f"{args.data_dir}/*/*/metrics.csv")) or \
+            sorted(glob.glob(f"{args.data_dir}/*/*/data.csv"))
     if args.limit:
         cases = cases[:args.limit]
     results, ok = [], 0
@@ -93,16 +95,19 @@ def main():
         svc = svc_fault.split("_", 1)[0]
         d0 = os.path.dirname(p)
         inj = open(os.path.join(d0, "inject_time.txt")).read().strip()
-        # 日志（csv 或 parquet）
+        # 日志（csv 或 parquet；RE1 指标型无日志文件 → 优雅跳过）
         logs_path = os.path.join(d0, "logs.csv")
         if os.path.exists(logs_path):
             logs = pd.read_csv(logs_path, low_memory=False)
             log_lines = [f"[{r['container_name']}] {str(r['message'])}" for _, r in logs.iterrows()][:80000]
         else:
             logs_path = os.path.join(d0, "logs.parquet")
-            logs = pd.read_parquet(logs_path)
-            log_lines = [f"[{r['container_name']}] {str(r['message'])}" for _, r in logs.iterrows()]
-        log_view = ours_log_view(log_lines)
+            if os.path.exists(logs_path):
+                logs = pd.read_parquet(logs_path)
+                log_lines = [f"[{r['container_name']}] {str(r['message'])}" for _, r in logs.iterrows()]
+            else:
+                log_lines = []
+        log_view = ours_log_view(log_lines) if log_lines else ""
         # 追踪
         trace_text = ""
         for tp in ("traces.csv", "traces.parquet"):
