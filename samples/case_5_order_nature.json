@@ -113,7 +113,7 @@
    "数据：原始 trace span[20] 日志 reqApolloAnalysisField 拉取 Apollo ark_order_config 的 order_type 配置原文 {\"7\":\"指派订单\",\"30\":\"排队订单\",...}（标签来源枚举已直接验证）"
   ],
   "confidence": "高",
-  "note": "机制链完整（assign_type=2 → QLE 映射 order_type=7 → Apollo order_type 枚举 → 标签\"指派订单\"），Apollo 配置原文已在原始 trace span[20] 直接验证；仅 QLE 表达式原文（assign_type→order_type 的具体映射规则）在 eternalpose 配置平台未随 trace 捕获"
+  "note": "机制链完整（assign_type=2 → QLE 映射 order_type=7 → Apollo order_type 枚举 → 标签\"指派订单\"），Apollo 配置原文已在原始 trace span[20] 直接验证；仅 QLE 表达式原文（assign_type→order_type 的具体映射规则）在 eternalpose 配置平台未随 trace 捕获，需登录 eternalpose 平台核实"
  },
  "source": {
   "trace_id": "0ab688896a797486aa55d190d44c4102",
