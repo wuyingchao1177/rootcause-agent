@@ -60,10 +60,16 @@ def parse_problem(problem_text: str) -> dict:
     # 引号中的标识符
     for m in re.finditer(r'["\']([\w.]+)["\']', problem_text):
         keywords.add(m.group(1))
+    # camelCase / snake_case 标识符（字段溯源类问题：getOrderInfo/nature_name/assign_type 等）
+    # 只收原始标识符；token 拆分与停用词过滤由 locate_code 内部处理
+    for m in re.finditer(r'\b[a-z][a-zA-Z0-9_]{2,}\b', problem_text):
+        ident = m.group(0)
+        if any(c.isupper() for c in ident) or "_" in ident:  # 驼峰或下划线才收
+            keywords.add(ident)
     return {
         "problem": problem_text[:500],
         "keywords": list(keywords)[:20],
-        "severity_hint": "critical" if re.search(r'(?i)fatal|critical|宕机|崩溃', problem_text) else "normal",
+        "stack_trace": "",
     }
 
 
@@ -118,16 +124,39 @@ def locate_code(repo_root: str, keywords: list[str], stack_trace: str = "") -> l
             if rel.exists():
                 candidates.append((rel, f["line"]))
 
-    # 按关键词搜文件
+    # 按关键词搜文件（支持 Python/Java/Go/Kotlin 等常见语言）
+    # 两轮：①文件名含完整关键词（强相关）优先 ②camelCase 拆分 token（排除通用词）
     kw_lower = [k.lower() for k in keywords]
-    for p in root.rglob("*.py"):
-        if p.name.startswith("test_"):
+    _STOP = {"service", "impl", "vo", "enum", "entity", "mapper", "context", "response",
+             "request", "data", "config", "model", "base", "util", "utils", "common",
+             "manager", "handler", "node", "param"}
+    kw_tokens = set()
+    for k in keywords:  # 用原始大小写拆分（camelCase 边界依赖大写）
+        for tok in re.split(r"[_\-\.]+|(?<=[a-z0-9])(?=[A-Z])", k):
+            t = tok.lower()
+            if len(t) >= 4 and t not in _STOP:
+                kw_tokens.add(t)
+    skip_dirs = {".git", "target", "build", "out", "node_modules", ".venv", "venv",
+                 "__pycache__", ".idea", ".gradle", "dist", "vendor"}
+    for p in root.rglob("*"):
+        if not p.is_file() or p.suffix not in (".py", ".java", ".kt", ".go", ".scala"):
             continue
-        if any(k.lower() in p.name.lower() for k in kw_lower):
-            candidates.append((p, None))
+        if p.name.startswith("test_") or p.name.endswith("Test.java"):
+            continue
+        if any(part in skip_dirs for part in p.parts):
+            continue
+        pname = p.name.lower()
+        strong = any(k in pname for k in kw_lower)          # 完整关键词命中
+        weak = any(tok in pname for tok in kw_tokens)       # 拆分 token 命中
+        if strong or weak:
+            # 命中数打分：完整关键词命中权重 3，token 命中权重 1
+            score = sum(3 for k in kw_lower if k in pname) + sum(1 for tok in kw_tokens if tok in pname)
+            candidates.append((p, None, strong, score))
+    # 强相关优先 + 命中数降序，取前 8
+    candidates.sort(key=lambda x: (not x[2], -x[3]))
 
     seen = set()
-    for p, focus_line in candidates[:5]:
+    for p, focus_line, _strong, _score in candidates[:5]:
         if str(p) in seen:
             continue
         seen.add(str(p))

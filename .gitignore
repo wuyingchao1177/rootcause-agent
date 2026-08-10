@@ -29,3 +29,5 @@ deepseek_key
 .pytest_cache/
 .coverage
 htmlcov/
+docs/competition-submission.md
+docs/competition-diagrams/

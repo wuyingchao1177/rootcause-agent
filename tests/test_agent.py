@@ -71,3 +71,52 @@ class TestShortCircuitRule:
 
     def test_error_without_exception_class(self):
         assert not self._should_short("ERROR request failed with 500")
+
+
+class TestJavaCodeSupport:
+    """Java 代码定位支持（真实业务案例：订单性质字段溯源）。"""
+
+    def test_java_signature_extraction(self):
+        from common.code_compressor import extract_java_signatures
+        java = """public class BwhOrderServiceImpl {
+    private final OrderProxyService orderProxyService;
+    public JSONObject saasgetOrderInfo(OrderQueryParam param, String userName) {
+        JSONObject response = orderProxyService.getOrderInfo(param, userName);
+        invokeStrategyService.invokeStrategy(response, relationVO);
+        return response;
+    }
+}"""
+        sigs = extract_java_signatures(java)
+        assert any(s["kind"] == "class" and s["name"] == "BwhOrderServiceImpl" for s in sigs)
+        assert any(s["kind"] == "method" and s["name"] == "saasgetOrderInfo" for s in sigs)
+
+    def test_java_compress_fallback(self):
+        from common.code_compressor import compress_code
+        java = """public class A {
+    public String getOrderInfo(OrderParam p) {
+        JSONObject r = proxy.getOrderInfo(p);
+        return r.toString();
+    }
+}"""
+        out = compress_code(java, file_path="A.java", keywords=["getOrderInfo"])
+        assert "A.java" in out
+        assert "getOrderInfo" in out
+
+    def test_parse_problem_camelcase_keywords(self):
+        from locator.agent import parse_problem
+        p = parse_problem("接口 getOrderInfo 返回的 nature_name 为什么包含指派订单（order_id=70409418871768）")
+        kws = p["keywords"]
+        assert any("getOrderInfo" in k for k in kws)
+        assert any("nature_name" in k for k in kws)
+        assert any("order_id" in k for k in kws)
+
+    def test_locate_code_java(self, tmp_path):
+        from locator.agent import locate_code
+        (tmp_path / "src").mkdir()
+        (tmp_path / "src" / "BwhOrderServiceImpl.java").write_text(
+            "public class BwhOrderServiceImpl { public JSONObject saasgetOrderInfo() { return null; } }")
+        (tmp_path / "src" / "NoiseUtil.java").write_text("public class NoiseUtil {}")
+        found = locate_code(str(tmp_path), ["getOrderInfo", "nature_name"], "")
+        names = [f["path"].split("/")[-1] for f in found]
+        assert "BwhOrderServiceImpl.java" in names
+        assert "NoiseUtil.java" not in names

@@ -15,7 +15,7 @@ from typing import Optional
 
 
 def extract_method_signatures(source: str) -> list[dict]:
-    """用 AST 提取类和方法签名。"""
+    """用 AST 提取类和方法签名（Python）；非 Python 源码 AST 失败时返回空（调用方降级）。"""
     result = []
     try:
         tree = ast.parse(source)
@@ -30,29 +30,37 @@ def extract_method_signatures(source: str) -> list[dict]:
                             "name": item.name,
                             "args": args,
                             "line": item.lineno,
-                            "decorators": [d.id for d in item.decorator_list if isinstance(d, ast.Name)],
                         })
-            elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                args = [a.arg for a in node.args.args]
+    except (SyntaxError, ValueError):
+        return []  # 非 Python（如 Java）→ 由 Java 签名提取降级
+    return result
+
+
+# Java 方法签名正则：修饰符 + 返回类型 + 方法名(参数)（支持泛型/数组/注解修饰）
+_JAVA_METHOD_RE = re.compile(
+    r'^\s*(?:public|private|protected|static|final|synchronized|default|@\w[\w.]*)\s+'
+    r'(?:[\w<>\[\]?,\s]+\s+)?[\w<>\[\]?,\s]+[\w]\s*\([^;{}]*\)\s*(?:throws\s+[\w,.\s]+)?\s*\{?'
+)
+_JAVA_CLASS_RE = re.compile(r'^\s*(?:public|abstract|final)?\s*(?:class|interface|enum|@interface)\s+(\w+)')
+
+
+def extract_java_signatures(source: str) -> list[dict]:
+    """Java 代码的正则签名提取（不依赖 AST，零依赖）。"""
+    result = []
+    cur_class = ""
+    for i, line in enumerate(source.split("\n")):
+        cm = _JAVA_CLASS_RE.match(line)
+        if cm:
+            cur_class = cm.group(1)
+            result.append({"kind": "class", "class": cur_class, "name": cur_class, "args": [], "line": i + 1})
+            continue
+        if _JAVA_METHOD_RE.match(line):
+            mname = re.search(r'(\w+)\s*\(', line)
+            if mname:
                 result.append({
-                    "kind": "function",
-                    "class": None,
-                    "name": node.name,
-                    "args": args,
-                    "line": node.lineno,
-                    "decorators": [d.id for d in node.decorator_list if isinstance(d, ast.Name)],
+                    "kind": "method", "class": cur_class, "name": mname.group(1),
+                    "args": [], "line": i + 1,
                 })
-    except SyntaxError:
-        # 非 Python 文件，退化用正则
-        for m in re.finditer(r'(?:def|class)\s+(\w+)\s*\(([^)]*)\)', source):
-            result.append({
-                "kind": "def_or_class",
-                "class": None,
-                "name": m.group(1),
-                "args": [a.strip() for a in m.group(2).split(",") if a.strip()],
-                "line": source[:m.start()].count("\n") + 1,
-                "decorators": [],
-            })
     return result
 
 
@@ -77,8 +85,10 @@ def compress_code(source: str, file_path: str = "",
     keywords = keywords or []
     kw_lower = [k.lower() for k in keywords]
 
-    # 1. 提取方法签名
+    # 1. 提取方法签名（Python AST 优先；Java/其他语言降级为正则）
     signatures = extract_method_signatures(source)
+    if not signatures:
+        signatures = extract_java_signatures(source)
 
     # 2. 找出关键行（关键词命中 + 栈 focus 行 + 异常/日志相关）
     key_line_idx = set()
@@ -107,7 +117,7 @@ def compress_code(source: str, file_path: str = "",
     if signatures:
         out.append("## 方法签名")
         for s in signatures[:40]:
-            deco = f" @{','.join(s['decorators'])}" if s["decorators"] else ""
+            deco = f" @{','.join(s.get('decorators', []))}" if s.get("decorators") else ""
             cls = f"{s['class']}." if s["class"] else ""
             out.append(f"L{s['line']}: {cls}{s['name']}({', '.join(s['args'])}){deco}")
         out.append("")
