@@ -67,7 +67,11 @@ def extract_java_signatures(source: str) -> list[dict]:
 def compress_code(source: str, file_path: str = "",
                   keywords: Optional[list[str]] = None,
                   focus_lines: Optional[list[int]] = None,
-                  max_lines: int = 120) -> str:
+                  max_lines: int = 120,
+                  sig_limit: int = 40,
+                  key_line_limit: int = 60,
+                  context_lines: int = 2,
+                  import_limit: int = 25) -> str:
     """
     压缩代码文件为 LLM 友好的摘要。
 
@@ -117,14 +121,14 @@ def compress_code(source: str, file_path: str = "",
     imports = [l for l in lines[:60] if l.strip().startswith(("import ", "from ", "package "))]
     if imports:
         out.append("## 依赖/import")
-        for imp in imports[:25]:
+        for imp in imports[:import_limit]:
             out.append(imp.strip())
         out.append("")
 
     # 签名表
     if signatures:
         out.append("## 方法签名")
-        for s in signatures[:40]:
+        for s in signatures[:sig_limit]:
             deco = f" @{','.join(s.get('decorators', []))}" if s.get("decorators") else ""
             cls = f"{s['class']}." if s["class"] else ""
             out.append(f"L{s['line']}: {cls}{s['name']}({', '.join(s['args'])}){deco}")
@@ -134,8 +138,8 @@ def compress_code(source: str, file_path: str = "",
     if key_line_idx:
         out.append("## 关键代码行")
         shown = set()
-        for idx in sorted(key_line_idx)[:60]:
-            for j in range(max(0, idx - 1), min(len(lines), idx + 2)):
+        for idx in sorted(key_line_idx)[:key_line_limit]:
+            for j in range(max(0, idx - context_lines), min(len(lines), idx + context_lines + 1)):
                 if j in shown:
                     continue
                 shown.add(j)

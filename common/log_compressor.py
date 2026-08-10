@@ -96,6 +96,68 @@ def get_level(line: str) -> str:
     return m.group(1).upper() if m else "UNKNOWN"
 
 
+# ─── 记录级过滤（采集层压缩的通用复刻）───────────────────────────────
+# 思想（源自 log_search trace_detail）：无业务载荷/无业务标识的记录不产生 token。
+# 通用实现：记录 = 前缀标记行（[span3]/[log2]/[req1] 等任意「前缀+序号」标记）及其子行；
+#           业务标识 = 行内 uri/url/interface/api/path/method 等标识键。
+# 换日志格式时只需调整前缀/标识键正则（不写死具体格式）。
+
+_RECORD_PREFIX_RE = re.compile(r'^\s*\[([A-Za-z]+)(\d+)[A-Za-z]*\]')
+_IDENT_KEY_RE = re.compile(
+    r'([A-Za-z_]*uri[A-Za-z_]*|[A-Za-z_]*url[A-Za-z_]*|[A-Za-z_]*interface[A-Za-z_]*|'
+    r'[A-Za-z_]*api[A-Za-z_]*|[A-Za-z_]*path[A-Za-z_]*|[A-Za-z_]*method[A-Za-z_]*'
+    r'|[A-Za-z_]*标识[A-Za-z_]*)\s*=')
+
+
+def _record_id(line: str) -> str | None:
+    """提取行所属记录前缀（如 [span3req] → span3）；非记录行返回 None。"""
+    m = _RECORD_PREFIX_RE.match(line)
+    return f"{m.group(1)}{m.group(2)}" if m else None
+
+
+def _record_has_identifier(line: str) -> bool:
+    """记录行是否含业务标识键（uri/url/interface/api/path/method 等）。"""
+    return bool(_IDENT_KEY_RE.search(line))
+
+
+def _record_identifier_empty(line: str) -> bool:
+    """标识键的值是否为空（= 后紧跟空白/标点/结束 → 空值，等效 log_search 的 'uri 为空跳过'）。"""
+    for m in _IDENT_KEY_RE.finditer(line):
+        after = line[m.end():]
+        if not after or after[0] in (' ', '\t', ',', '}', ']', '[', '|'):
+            return True
+    return False
+
+
+def _drop_empty_identifier_records(lines: list[str]) -> list[str]:
+    """记录级过滤：业务标识为空的记录（及其子行）整组删除。
+    效果对齐 log_search trace_detail：无 uri 的桥接 span 及其日志不产生 token。"""
+    empty_groups = set()
+    for line in lines:
+        rid = _record_id(line)
+        if rid and _record_has_identifier(line) and _record_identifier_empty(line):
+            empty_groups.add(rid)
+    if not empty_groups:
+        return lines
+    return [l for l in lines if _record_id(l) not in empty_groups]
+
+
+def _is_placeholder_row(line: str) -> bool:
+    """通用占位行检测：去掉常见前缀（时间戳/级别/序号）后，剩余仅占位符或为空。"""
+    s = re.sub(r'^\s*[\d\-:T.\s]+', '', line)                       # 时间戳
+    s = re.sub(r'^\s*(ERROR|WARN|INFO|DEBUG|FATAL|UNKNOWN|TRACE)\s*', '', s, flags=re.I)
+    s = re.sub(r'^\s*\[[A-Za-z]+\d+[A-Za-z]*\]\s*', '', s)          # 记录前缀
+    s = s.strip().strip('|,;: ').strip()
+    if not s:
+        return True
+    tokens = re.findall(r'\[[^\]]*\]|[\w.:/-]+', s)
+    if not tokens:
+        return False  # 有符号但无 token —— 保守不删
+    _PH = {"null", "none", "n/a", "na", "-", "--", "[uri not found]",
+           "[not found]", "[]", "{}", "undefined"}
+    return all(t.lower() in _PH or re.fullmatch(r'\[[^\]]*\]', t) for t in tokens)
+
+
 def is_key_line(line: str) -> bool:
     """ERROR/异常行，或含业务信号的行。"""
     return bool(KEY_LINE_RE.search(line)) or bool(BUSINESS_SIGNAL_RE.search(line))
@@ -105,7 +167,8 @@ def compress_log(lines: list[str], max_lines: int = 200000,
                  max_key_templates: int = 1000,
                  max_noise_templates: int = 300,
                  context_window: int = 2,
-                 tail_window: int = 120) -> dict:
+                 tail_window: int = 120,
+                 drop_placeholder_rows: bool = True) -> dict:
     """
     压缩日志（v3 信息无损）。
 
@@ -121,6 +184,9 @@ def compress_log(lines: list[str], max_lines: int = 200000,
         }
     """
     lines = lines[:max_lines]
+    if drop_placeholder_rows:
+        lines = [l for l in lines if not _is_placeholder_row(l)]
+        lines = _drop_empty_identifier_records(lines)
     key_counter: OrderedDict[str, int] = OrderedDict()
     noise_counter: OrderedDict[str, int] = OrderedDict()
     level_stats = {"ERROR": 0, "WARN": 0, "INFO": 0, "DEBUG": 0, "FATAL": 0, "UNKNOWN": 0}

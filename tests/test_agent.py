@@ -120,3 +120,38 @@ class TestJavaCodeSupport:
         names = [f["path"].split("/")[-1] for f in found]
         assert "BwhOrderServiceImpl.java" in names
         assert "NoiseUtil.java" not in names
+
+
+class TestRecordFilter:
+    """记录级过滤（log_search trace_detail 思想的通用复刻：空业务标识记录不产生 token）。"""
+
+    def test_drop_empty_uri_records(self):
+        from common.log_compressor import _drop_empty_identifier_records
+        lines = [
+            '[span0] uri=kefu/getOrderInfo app=[wb] status=0',
+            '[span0req] {"interface": "/kefu/getOrderInfo"}',
+            '[span1] uri= app=[bridge] status=0 logs=0',
+            '[span1call] GET status=0',
+            '[span2] uri=[URI not found] app=[x] status=0',
+            '[span3] uri=dos/getOrderInfo app=[dos] status=0',
+        ]
+        f = _drop_empty_identifier_records(lines)
+        kept = [l.split()[0] for l in f if l.startswith("[span")]
+        assert not any(k.startswith(("[span1]", "[span2]")) for k in kept)
+        assert any(k.startswith("[span0]") for k in kept)
+        assert any(k.startswith("[span3]") for k in kept)
+
+    def test_keep_normal_records(self):
+        from common.log_compressor import _drop_empty_identifier_records
+        lines = [
+            '[span0] uri=/api/order/getOrderInfo app=[wb] status=0',
+            '[log1] 2026-08-07 14:00:00 ERROR RedisTimeoutException',
+        ]
+        f = _drop_empty_identifier_records(lines)
+        assert len(f) == 2
+
+    def test_placeholder_rows(self):
+        from common.log_compressor import _is_placeholder_row
+        assert _is_placeholder_row("2026-01-01 [uri not found]")
+        assert _is_placeholder_row("2026-01-01 00:00:00 ERROR")
+        assert not _is_placeholder_row("2026-01-01 ERROR boom redis timeout")
