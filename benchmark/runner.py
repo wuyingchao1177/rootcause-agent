@@ -53,11 +53,17 @@ def run_baseline(llm, case: dict) -> dict:
 
     log_text = "\n".join(case["logs"])  # 全量日志，不截断
     code_text = ""
-    for cf in case["code_files"][:5]:
-        try:
-            code_text += f"--- {cf} ---\n{Path(cf).read_text()}\n"
-        except Exception:
-            pass
+    cf_src = case["code_files"]
+    if isinstance(cf_src, dict):  # 新格式：{文件名: 代码片段}
+        items = list(cf_src.items())[:5]
+        for name, content in items:
+            code_text += f"--- {name} ---\n{content}\n"
+    else:  # 旧格式：list[路径]
+        for cf in cf_src[:5]:
+            try:
+                code_text += f"--- {cf} ---\n{Path(cf).read_text()}\n"
+            except Exception:
+                pass
 
     sys_prompt = (
         "你是资深 SRE，根据日志和代码定位问题根因。"
@@ -99,21 +105,30 @@ def run_compressed(llm, case: dict) -> dict:
     focus = []
     for m in re.finditer(r'([\w/]+\.\w+):(\d+)', case.get("problem", "")):
         focus.append((m.group(1), int(m.group(2))))
-    for cf in case["code_files"][:3]:
-        try:
-            src = Path(cf).read_text()
-            fl = [line for path, line in focus if path.split("/")[-1] == Path(cf).name]
-            code_text += compress_code(src, file_path=cf, keywords=case["keywords"],
-                                       focus_lines=fl or None) + "\n"
-        except Exception:
-            pass
+    cf_src = case["code_files"]
+    if isinstance(cf_src, dict):  # 新格式：{文件名: 代码片段（已压缩）}
+        for name, content in list(cf_src.items())[:3]:
+            code_text += f"--- {name} ---\n{content}\n"
+    else:  # 旧格式：list[路径]
+        for cf in cf_src[:3]:
+            try:
+                src = Path(cf).read_text()
+                fl = [line for path, line in focus if path.split("/")[-1] == Path(cf).name]
+                code_text += compress_code(src, file_path=cf, keywords=case["keywords"],
+                                           focus_lines=fl or None) + "\n"
+            except Exception:
+                pass
 
     sys_prompt = (
-        "你是资深 SRE，根据压缩后的日志模板和关键代码行定位问题根因。"
+        "你是资深 SRE + 后端架构师，根据压缩后的日志模板和关键代码行定位问题根因。"
         "日志中 [xN] 表示该模板出现 N 次。<*> 是变量占位符。\n"
-        "输出格式:\n根因: <一句话>\n证据: <日志行/代码行引用>\n修复建议: <具体建议>"
+        "要求：\n"
+        "1. 输出结构：① 根因链（触发条件→直接原因→根本原因）② 关键证据（引用具体日志行/代码行）"
+        "③ 定位置信度（高/中/低，推断与有据结论分开）④ 修复建议\n"
+        "2. 每条结论必须引用具体证据，禁止无证据断言\n"
+        "3. 若结论依赖外部配置/规则（QLE 表达式、策略配置等），标注哪些已直接验证、哪些未直接验证、如何人工核实\n"
     )
-    user_prompt = f"## 问题\n{case['problem']}\n\n## 压缩日志\n{log_text[:6000]}\n\n## 代码片段\n{code_text[:6000]}"
+    user_prompt = f"## 问题\n{case['problem']}\n\n## 压缩日志\n{log_text[:8000]}\n\n## 代码片段\n{code_text[:8000]}"
 
     start = time.time()
     try:

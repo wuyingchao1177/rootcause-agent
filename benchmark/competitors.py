@@ -33,18 +33,27 @@ def _run_tool(cmd: list[str], input_text: str = "") -> str:
 
 # ─── 各压缩器 ──────────────────────────────────────────────────
 
-def compress_rtk(logs: list[str], code_files: list[str]) -> dict:
+def _cf_sources(code_files) -> list[tuple[str, str]]:
+    """兼容 code_files 两种格式（dict: {文件名: 内容} / list: [路径]），返回 [(名称, 内容)]。"""
+    if isinstance(code_files, dict):
+        return list(code_files.items())
+    out = []
+    for p in code_files:
+        try:
+            out.append((Path(p).name, Path(p).read_text()))
+        except Exception:
+            pass
+    return out
+
+
+def compress_rtk(logs: list[str], code_files) -> dict:
     """RTK: rtk log 去重 + rtk read 代码。"""
     log_text = "\n".join(logs)
     out = _run_tool(["rtk", "log"], log_text)
 
     code_parts = []
-    for cf in code_files[:2]:
-        try:
-            src = Path(cf).read_text()
-            code_parts.append(f"--- {Path(cf).name} ---\n{src[:4000]}")
-        except Exception:
-            pass
+    for name, src in _cf_sources(code_files)[:2]:
+        code_parts.append(f"--- {name} ---\n{src[:4000]}")
 
     prompt = f"{out}\n\n{' '.join(code_parts)[:4000]}"
     return {"prompt": prompt, "input_chars": len(prompt)}
@@ -54,11 +63,9 @@ def compress_tail200(logs: list[str], code_files: list[str]) -> dict:
     """LogDx-CI tail-200: 只取最后200行。"""
     log_text = "\n".join(logs[-200:])
     code_text = ""
-    for cf in code_files[:2]:
-        try:
-            code_text += f"--- {Path(cf).name} ---\n{Path(cf).read_text()[:3000]}\n"
-        except Exception:
-            pass
+    for name, src in _cf_sources(code_files)[:2]:
+        code_text += f"--- {name} ---\n{src[:3000]}\n"
+
     prompt = f"{log_text}\n\n{code_text}"
     return {"prompt": prompt, "input_chars": len(prompt)}
 
@@ -69,11 +76,9 @@ def compress_grep(logs: list[str], code_files: list[str]) -> dict:
     filtered = [l for l in logs if pat.search(l)]
     log_text = "\n".join(filtered[:300])
     code_text = ""
-    for cf in code_files[:2]:
-        try:
-            code_text += f"--- {Path(cf).name} ---\n{Path(cf).read_text()[:3000]}\n"
-        except Exception:
-            pass
+    for name, src in _cf_sources(code_files)[:2]:
+        code_text += f"--- {name} ---\n{src[:3000]}\n"
+
     prompt = f"{log_text}\n\n{code_text}"
     return {"prompt": prompt, "input_chars": len(prompt)}
 
@@ -102,11 +107,9 @@ def compress_drain(logs: list[str], code_files: list[str]) -> dict:
         log_text = format_compressed_log(compress_log(logs))
 
     code_text = ""
-    for cf in code_files[:2]:
-        try:
-            code_text += f"--- {Path(cf).name} ---\n{Path(cf).read_text()[:3000]}\n"
-        except Exception:
-            pass
+    for name, src in _cf_sources(code_files)[:2]:
+        code_text += f"--- {name} ---\n{src[:3000]}\n"
+
     prompt = f"{log_text}\n\n{code_text}"
     return {"prompt": prompt, "input_chars": len(prompt)}
 
@@ -127,11 +130,9 @@ def compress_headroom(logs: list[str], code_files: list[str]) -> dict:
         log_text = "\n".join(logs[:3000])
 
     code_text = ""
-    for cf in code_files[:2]:
-        try:
-            code_text += f"--- {Path(cf).name} ---\n{Path(cf).read_text()[:3000]}\n"
-        except Exception:
-            pass
+    for name, src in _cf_sources(code_files)[:2]:
+        code_text += f"--- {name} ---\n{src[:3000]}\n"
+
     prompt = f"{log_text}\n\n{code_text}"
     return {"prompt": prompt, "input_chars": len(prompt)}
 
@@ -145,11 +146,9 @@ def compress_hybrid(logs: list[str], code_files: list[str]) -> dict:
     parts += logs[-50:]
     log_text = "\n".join(dict.fromkeys(parts))  # 去重保序
     code_text = ""
-    for cf in code_files[:2]:
-        try:
-            code_text += f"--- {Path(cf).name} ---\n{Path(cf).read_text()[:3000]}\n"
-        except Exception:
-            pass
+    for name, src in _cf_sources(code_files)[:2]:
+        code_text += f"--- {name} ---\n{src[:3000]}\n"
+
     prompt = f"{log_text}\n\n{code_text}"
     return {"prompt": prompt, "input_chars": len(prompt)}
 
