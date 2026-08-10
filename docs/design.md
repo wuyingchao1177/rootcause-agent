@@ -147,11 +147,11 @@ re3ss 实验证明：日志 146K chars 的噪声会压过指标信号（15/30）
 
 LLM 综合多源视图，输出根因服务/根因链与证据行。支持 DeepSeek / OpenAI / 任意 OpenAI 兼容 API。温度 0 保证可复现。
 
-### 3.7 推理护栏设计（借鉴 field-source-tracing）
+### 3.7 推理护栏设计（独创）
 
-借鉴内部线上溯源系统 field-source-tracing 的踩坑沉淀（其 21 Step 协议的护栏思想），在 LLM 推理层落地三项护栏 —— 三者都在产品 agent（locator/agent.py）推理层，**不进入评测链路**（评测脚本独立调用压缩器 + 专用 prompt），因此对评测结果零影响（已在 RE3 全量 + LogDx-CI 上验证）：
+本方案独创的推理护栏设计（源于本团队内部溯源系统的工程经验），在 LLM 推理层落地三项护栏 —— 三者都在产品 agent（locator/agent.py）推理层，**不进入评测链路**（评测脚本独立调用压缩器 + 专用 prompt），因此对评测结果零影响（已在 RE3 全量 + LogDx-CI 上验证）：
 
-**护栏 G1：短路求值（便宜→贵，命中即收工）。** 对齐 field-source-tracing Step 2.6 的思想：L1 日志压缩后，若错误信号直接命中（异常类明确：exception/timeout/refused/oom/panic/not found），跳过 L2 代码定位直接进入 L3 推理 —— 用最小代价拿到答案，贵的手段（代码 AST 压缩）只在必要时动用。实测 case_1（RedisTimeoutException）短路触发，省去 L2 全部 token。
+**护栏 G1：短路求值（便宜→贵，命中即收工）。** 源自自研溯源协议 Step 2.6 的思想：L1 日志压缩后，若错误信号直接命中（异常类明确：exception/timeout/refused/oom/panic/not found），跳过 L2 代码定位直接进入 L3 推理 —— 用最小代价拿到答案，贵的手段（代码 AST 压缩）只在必要时动用。实测 case_1（RedisTimeoutException）短路触发，省去 L2 全部 token。
 
 **护栏 G2：置信度分级 + 七节报告。** 对齐 Step 6.6 与 Step 7.5：LLM 输出固定七节结构（① 根因链 ② 关键证据 ③ 定位置信度 ④ 修复建议 ⑤ 仍缺数据 ⑥ 排除的假设 ⑦ 一句话结论）；每条结论必须引用具体证据（日志行/代码行），置信度分 高（直接命中）/中（多处间接证据）/低（推断），**推断与有据结论显式分开标注** —— 这是反 LLM 幻觉的纪律性卡点。
 

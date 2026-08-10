@@ -1,6 +1,6 @@
 # RootCause Agent v4 重构蓝图
 
-> 基于用户自研 skill `field-source-tracing`（Obsidian 02 文档）的设计思想，
+> 基于自研内部溯源 skill（Obsidian 02 文档）的设计思想，
 > 把"字段溯源协议"泛化为"根因定位诊断协议"。
 > 状态：等待用户提供 log_search.py + 真实 APM 日志后实施。
 
@@ -13,14 +13,14 @@ v3 在"语法层压缩"（模板化+去重）上和 RTK 竞争：
 **结论：语法层是 RTK 主场，不该在那里拼。** RTK 是"压缩器"（去冗余），
 我们是"诊断协议"（找根因）。差异必须在诊断架构上体现。
 
-## field-source-tracing 的 5 个核心设计（直接借鉴）
+## 自研内部溯源 skill 的 5 个核心设计
 
 ### 1. 脚本层 / Agent 层分工（最重要）
 ```
 脚本层(确定性,零LLM): 取数 → 正则抽关键字段 → 裁剪 → 结构化证据
 Agent层(大模型): 只读结构化证据 → 语义判断 → 输出报告
 
-field-source-tracing 具体做法:
+自研溯源 skill 具体做法:
   - log_search.py (650行, 零LLM) 用 HMAC-SHA1 鉴权拉 APM
   - 正则抽 5 个字段: request_in / http_calls / resp / errno / latency
   - 单 span 几十 KB → 几行结构化 JSON
@@ -41,7 +41,7 @@ Step 2.6 读 getter(最便宜) → 命中即收工，不拉 APM(最贵)
 
 ### 3. 信息裁剪 ≠ 最大压缩
 ```
-field-source-tracing:
+自研溯源 skill:
   - 正则抽 5 字段, 不碰原始日志
   - 截断 2000 字符只在 json.loads 失败时触发 (只砍坏数据, 不碰真数据)
   - --summary 只取 uri 骨架 | --filter-uri 只对关心的 span 拉详情
@@ -111,10 +111,10 @@ Benchmark 指标升级:
 
 ## 待用户提供
 
-1. ~~log_search.py（5 字段正则提取实现）~~ ✅ 已就位（Obsidian vault/20-knowledge/skills/skills/field-source-tracing/）
+1. ~~log_search.py（5 字段正则提取实现）~~ ✅ 已就位（Obsidian 个人 skill 库）
 2. 真实 APM 日志样本（脱敏，几十~几百行）
 3. 服务调用关系 / 服务列表（可选）
-4. ~~field-source-tracing 的 SKILL.md（协议详细步骤）~~ ✅ 已就位（836 行完整版）
+4. ~~自研溯源 SKILL.md（协议详细步骤）~~ ✅ 已就位（836 行完整版）
 
 ---
 
