@@ -29,6 +29,12 @@ for i, s in enumerate(trace["spans"]):
         for h in hc[:5]:
             if isinstance(h, dict):
                 log_lines.append(f"[span{i}call] {h.get('method','')} {h.get('url', h.get('uri',''))} status={h.get('status','')}")
+                # 保留响应体中的关键业务字段（字段溯源输入值：assign_type/nature_name/order_id 等）
+                for kf in ["assign_type", "nature_name", "order_id", "extra_type", "long_rent_type"]:
+                    ht = json.dumps(h, ensure_ascii=False)
+                    idx = ht.find(kf)
+                    if idx >= 0:
+                        log_lines.append(f"[span{i}call] 字段[{kf}]: {ht[max(0, idx-60):idx+100]}")
 
 # 2. 代码片段（QLE 规则执行链路）
 code_files = {}
