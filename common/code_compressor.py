@@ -113,6 +113,14 @@ def compress_code(source: str, file_path: str = "",
         out.append(f"# File: {file_path} ({len(lines)} lines)")
     out.append("")
 
+    # import/依赖区（保留外部 SDK/包名 —— 是系统依赖的关键线索，如 eternalpose 配置平台）
+    imports = [l for l in lines[:60] if l.strip().startswith(("import ", "from ", "package "))]
+    if imports:
+        out.append("## 依赖/import")
+        for imp in imports[:25]:
+            out.append(imp.strip())
+        out.append("")
+
     # 签名表
     if signatures:
         out.append("## 方法签名")

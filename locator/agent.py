@@ -199,6 +199,9 @@ def analyze_root_cause(problem: dict, log_analysis: dict,
         "errno=0 且空 = 业务事实空（用户确实无此数据，接口正常）；errno≠0 且空 = 接口/配置故障；"
         "禁止把'业务空'误判为'接口故障'，反之亦然\n"
         "5. 信息不足时明确指出还需要什么数据，标注 UNKNOWN，不要臆测\n"
+        "6. 验证边界（字段溯源/配置类问题必做）：若结论依赖外部配置/规则（如 QLE 表达式、策略配置、"
+        "数据源配置），先检查代码 import/依赖线索（运行时数据中 '依赖/import' 区与文件头）推断配置存储位置，"
+        "并显式标注：哪些已直接验证、哪些未直接验证（⚠️）、如何人工核实（登录哪个平台/查哪个 key）\n"
     )
 
     context = []
@@ -221,8 +224,8 @@ def analyze_root_cause(problem: dict, log_analysis: dict,
         context.append("")
 
     if runtime_data:
-        context.append("## 运行时数据")
-        context.append(runtime_data[:2000])
+        context.append("## 运行时数据（业务字段/代码片段，含 import 依赖线索）")
+        context.append(runtime_data[:12000])  # 完整保留关键字段与依赖（之前 2000 截断丢失 eternalpose 等线索）
         context.append("")
 
     user_prompt = "\n".join(context) + "\n\n请给出根因分析。"

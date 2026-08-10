@@ -36,22 +36,21 @@ for i, s in enumerate(trace["spans"]):
                     if idx >= 0:
                         log_lines.append(f"[span{i}call] 字段[{kf}]: {ht[max(0, idx-60):idx+100]}")
 
-# 2. 代码片段（QLE 规则执行链路）
+# 2. 代码片段（QLE 规则执行链路 —— 完整文件压缩，保留 import/签名/关键行）
+import sys as _sys
+_sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__))))
+from common.code_compressor import compress_code
+
 code_files = {}
 paths = [
-    ("BwhOrderServiceImpl.java", "/Users/didi/IdeaProjects/sail2026/common-service/src/main/java/com/xiaoju/sail/workbench/common/service/impl/tenant/bwh/BwhOrderServiceImpl.java",
-     [(810, 840)]),
-    ("InvokeStrategyLocalServiceImpl.java", "/Users/didi/IdeaProjects/sail2026/common-service/src/main/java/com/xiaoju/sail/workbench/service/baas/InvokeStrategyLocalServiceImpl.java",
-     [(130, 170)]),
+    ("BwhOrderServiceImpl.java", "/Users/didi/IdeaProjects/sail2026/common-service/src/main/java/com/xiaoju/sail/workbench/common/service/impl/tenant/bwh/BwhOrderServiceImpl.java"),
+    ("InvokeStrategyLocalServiceImpl.java", "/Users/didi/IdeaProjects/sail2026/common-service/src/main/java/com/xiaoju/sail/workbench/service/baas/InvokeStrategyLocalServiceImpl.java"),
 ]
-for name, path, ranges in paths:
+for name, path in paths:
     if os.path.exists(path):
-        lines = open(path, encoding="utf-8").read().splitlines()
-        parts = []
-        for a, b in ranges:
-            parts.append(f"// {name} 第 {a}-{b} 行")
-            parts.extend(lines[a - 1:b])
-        code_files[name] = "\n".join(parts)
+        src = open(path, encoding="utf-8").read()
+        code_files[name] = compress_code(src, file_path=name,
+                                         keywords=["nature_name", "assign_type", "invokeStrategy", "PropertyManager"])
     else:
         code_files[name] = f"// {name} 未找到（{path}）"
 
