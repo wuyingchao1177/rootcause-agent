@@ -23,7 +23,8 @@ if __name__ == "__main__":
     methods = available_compressors()  # rtk/drain3/grep/tail/headroom（可用的）
     print(f"共 {len(cases)} case: {[c['id'] for c in cases]}")
     print(f"竞品方法: {methods}")
-    summary = run_horizontal_benchmark(cases, methods)
+    result = run_horizontal_benchmark(cases, methods)
+    summary = result["summary"]
     print("\n" + "=" * 78)
     print("横向对比汇总（7 case）")
     print("=" * 78)
@@ -31,6 +32,8 @@ if __name__ == "__main__":
     print(f"{'方法':<14} {'avg_tokens':<12} {'压缩率':<9} {'准确率':<9} 对比baseline")
     print("-" * 78)
     for m in ["baseline", "ours"] + methods:
+        if m not in summary:
+            continue
         d = summary[m]
         marker = ""
         if m != "baseline":
@@ -40,5 +43,5 @@ if __name__ == "__main__":
     out = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "results", "horizontal_7case.json")
     os.makedirs(os.path.dirname(out), exist_ok=True)
     with open(out, "w", encoding="utf-8") as f:
-        json.dump(summary, f, ensure_ascii=False, indent=1)
+        json.dump(result, f, ensure_ascii=False, indent=1)
     print(f"\n结果已存: {out}")

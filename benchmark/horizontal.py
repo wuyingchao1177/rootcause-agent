@@ -45,16 +45,28 @@ def make_prompt(case: dict, log_text: str, code_text: str) -> str:
     return f"## 问题\n{case['problem']}\n\n## 日志\n{log_text}\n\n## 代码\n{code_text}"
 
 
+def _cf_sources(code_files) -> list[tuple[str, str]]:
+    """兼容 code_files 两种格式（dict: {文件名: 内容} / list: [路径]）。"""
+    if isinstance(code_files, dict):
+        return list(code_files.items())
+    out = []
+    for p in code_files:
+        try:
+            out.append((Path(p).name, Path(p).read_text()))
+        except Exception:
+            pass
+    return out
+
+
 def run_ours(case: dict) -> dict:
     """我们的方案：日志模板化 + 代码 AST 压缩。"""
     compressed = compress_log(case["logs"])
     log_text = format_compressed_log(compressed)
 
     code_text = ""
-    for cf in case["code_files"][:2]:
+    for name, src in _cf_sources(case["code_files"])[:2]:
         try:
-            src = Path(cf).read_text()
-            code_text += compress_code(src, file_path=cf, keywords=case["keywords"]) + "\n"
+            code_text += compress_code(src, file_path=name, keywords=case["keywords"]) + "\n"
         except Exception:
             pass
 
@@ -67,11 +79,8 @@ def run_full(case: dict) -> dict:
     """Baseline: 全量输入。"""
     log_text = "\n".join(case["logs"])
     code_text = ""
-    for cf in case["code_files"][:2]:
-        try:
-            code_text += f"--- {cf} ---\n{Path(cf).read_text()}\n"
-        except Exception:
-            pass
+    for name, src in _cf_sources(case["code_files"])[:2]:
+        code_text += f"--- {name} ---\n{src}\n"
     prompt = make_prompt(case, log_text, code_text)
     return {"prompt": prompt, "input_chars": len(prompt), "method": "baseline"}
 
