@@ -20,7 +20,7 @@ v3 在"语法层压缩"（模板化+去重）上和 RTK 竞争：
 脚本层(确定性,零LLM): 取数 → 正则抽关键字段 → 裁剪 → 结构化证据
 Agent层(大模型): 只读结构化证据 → 语义判断 → 输出报告
 
-自研溯源 skill 具体做法:
+自研 skill 具体做法:
   - log_search.py (650行, 零LLM) 用 HMAC-SHA1 鉴权拉 APM
   - 正则抽 5 个字段: request_in / http_calls / resp / errno / latency
   - 单 span 几十 KB → 几行结构化 JSON
@@ -41,7 +41,7 @@ Step 2.6 读 getter(最便宜) → 命中即收工，不拉 APM(最贵)
 
 ### 3. 信息裁剪 ≠ 最大压缩
 ```
-自研溯源 skill:
+自研 skill:
   - 正则抽 5 字段, 不碰原始日志
   - 截断 2000 字符只在 json.loads 失败时触发 (只砍坏数据, 不碰真数据)
   - --summary 只取 uri 骨架 | --filter-uri 只对关心的 span 拉详情
@@ -114,7 +114,7 @@ Benchmark 指标升级:
 1. ~~log_search.py（5 字段正则提取实现）~~ ✅ 已就位（Obsidian 个人 skill 库）
 2. 真实 APM 日志样本（脱敏，几十~几百行）
 3. 服务调用关系 / 服务列表（可选）
-4. ~~自研溯源 SKILL.md（协议详细步骤）~~ ✅ 已就位（836 行完整版）
+4. ~~自研 SKILL.md（协议详细步骤）~~ ✅ 已就位（836 行完整版）
 
 ---
 
