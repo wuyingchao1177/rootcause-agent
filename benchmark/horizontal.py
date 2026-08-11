@@ -83,7 +83,7 @@ def run_ours(case: dict) -> dict:
         except Exception:
             pass
 
-    prompt = make_prompt(case, log_text[:12000], code_text[:30000])
+    prompt = make_prompt(case, log_text, code_text)
     return {"prompt": prompt, "input_chars": len(prompt), "method": "ours",
             "log_reduction": compressed["reduction_rate"]}
 

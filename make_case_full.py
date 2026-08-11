@@ -47,9 +47,7 @@ def extract_business(line: str, span_idx: int) -> str | None:
     for f in _KEY_FIELDS:
         for m in re.finditer(re.escape(f) + r'[^0-9A-Za-z]{0,4}[:=][^0-9A-Za-z]{0,4}([^",}\s][^",}]{0,80})', msg):
             field_parts.append(f"字段[{f}]: {f}{m.group(0)[len(f):]}")
-    # 超长内容截断（防 token 爆炸）
-    if len(msg) > 600:
-        msg = msg[:600] + "..."
+    # 原始内容完整保留（不硬截断 —— 字段提取(field_parts)已附加保真）
     msg = msg.strip()
     if field_parts:
         msg = msg + " || " + " | ".join(field_parts[:6])

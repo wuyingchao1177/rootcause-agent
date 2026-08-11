@@ -20,9 +20,9 @@ for i, s in enumerate(trace["spans"]):
     ri = s.get("request_in")
     if ri:
         if isinstance(ri, str):
-            log_lines.append(f"[span{i}req] {ri[:600]}")
+            log_lines.append(f"[span{i}req] {ri}")
         else:
-            log_lines.append(f"[span{i}req] {json.dumps(ri, ensure_ascii=False)[:600]}")
+            log_lines.append(f"[span{i}req] {json.dumps(ri, ensure_ascii=False)}")
     hc = s.get("http_calls")
     if hc:
         for h in hc[:5]:

@@ -67,7 +67,7 @@ def parse_problem(problem_text: str) -> dict:
         if any(c.isupper() for c in ident) or "_" in ident:  # 驼峰或下划线才收
             keywords.add(ident)
     return {
-        "problem": problem_text[:500],
+        "problem": problem_text,  # 完整问题描述（不硬截断 —— 可能含关键字段/上下文）
         "keywords": list(keywords)[:20],
         "stack_trace": "",
     }
@@ -213,19 +213,19 @@ def analyze_root_cause(problem: dict, log_analysis: dict,
     context.append("")
 
     context.append("## 压缩后的日志（关键行 + 高频模板）")
-    context.append(log_analysis["formatted"][:4000])
+    context.append(log_analysis["formatted"])  # 完整视图（信号已压缩，不硬截断 —— 硬截断会丢字段值证据）
     context.append("")
 
     if code_contexts:
         context.append("## 相关代码片段")
         for cc in code_contexts:
-            context.append(cc["compressed_code"][:3000])
+            context.append(cc["compressed_code"])  # 完整（代码已压缩，不硬截断）
             context.append("---")
         context.append("")
 
     if runtime_data:
         context.append("## 运行时数据（业务字段/代码片段，含 import 依赖线索）")
-        context.append(runtime_data[:12000])  # 完整保留关键字段与依赖（之前 2000 截断丢失 eternalpose 等线索）
+        context.append(runtime_data)  # 完整（字段值/依赖线索不硬截断）
         context.append("")
 
     user_prompt = "\n".join(context) + "\n\n请给出根因分析。"
@@ -316,7 +316,7 @@ if __name__ == "__main__":
     repo = sys.argv[3]
     runtime = ""
     if len(sys.argv) > 4 and os.path.exists(sys.argv[4]):
-        runtime = Path(sys.argv[4]).read_text()[:3000]
+        runtime = Path(sys.argv[4]).read_text()  # 完整（不硬截断）
 
     with open(log_path) as f:
         logs = f.readlines()
