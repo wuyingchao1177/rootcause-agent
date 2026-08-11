@@ -22,6 +22,39 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from common.log_compressor import compress_log, format_compressed_log, build_analysis_view
 from common.code_compressor import compress_code
 
+# 通用证据词（规则/配置/表达式/映射类 —— 项目无关，可配置扩展；
+# 具体字段名（如 assign_type）从问题文本提取，不写死）
+_EVIDENCE_KEYWORDS = (
+    "rule", "expression", "config", "pattern", "apollo", "enum",
+    "if(", "return ", "策略", "规则", "配置", "表达式", "枚举", "映射",
+)
+
+
+def retrieve_evidence(log_lines: list[str], keywords: list[str],
+                      max_lines: int = 40, ctx_lines: int = 1) -> list[str]:
+    """检索聚焦证据：按关键词从日志行提取相关行（含前后 1 行上下文）。
+
+    借鉴 field-source-tracing 的检索聚焦思想（分步检索，每步只看相关小块，
+    无长输入注意力稀释）。关键词 = 问题提取的字段名（不写死）+ 通用证据词。
+    max_lines 是检索结果的输出上限（聚焦产物，非对原文的硬截断）。
+    """
+    keys = [k.lower() for k in keywords if k] + list(_EVIDENCE_KEYWORDS)
+    idxs = set()
+    for i, line in enumerate(log_lines):
+        low = line.lower()
+        if any(k.lower() in low for k in keys):
+            for j in range(max(0, i - ctx_lines), min(len(log_lines), i + ctx_lines + 1)):
+                idxs.add(j)
+    hits = [f"[L{i}] {log_lines[i]}" for i in sorted(idxs)]
+    # 同类行去重（前 120 字符相同视为同模板，只留 1 条）
+    seen_t, dedup = set(), []
+    for h in hits:
+        t = h[:120]
+        if t not in seen_t:
+            seen_t.add(t)
+            dedup.append(h)
+    return dedup[:max_lines]
+
 
 def get_llm():
     """创建 LLM 实例（OpenAI 兼容）。
@@ -220,6 +253,17 @@ def analyze_root_cause(problem: dict, log_analysis: dict,
     context.append("## 关键词")
     context.append(", ".join(problem["keywords"]))
     context.append("")
+
+    # 聚焦证据区（检索相关行 —— 借鉴 field-source-tracing 分步检索：
+    # 关键词来自问题（不写死），只呈现相关小块，无注意力稀释）
+    try:
+        focus_lines = retrieve_evidence(log_lines, problem["keywords"])
+        if focus_lines:
+            context.append("## 聚焦证据（按关键词检索的相关日志行）")
+            context.extend(focus_lines)
+            context.append("")
+    except Exception:
+        pass
 
     context.append("## 压缩后的日志（关键行 + 高频模板）")
     context.append(log_analysis["formatted"])  # 完整视图（信号已压缩，不硬截断 —— 硬截断会丢字段值证据）
