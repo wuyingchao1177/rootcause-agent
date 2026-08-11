@@ -344,6 +344,21 @@ def service_error_distribution(key_templates, top_services: int = 8, top_templat
     return "\n".join(lines)
 
 
+def _clip_line(s: str, max_chars: int = 250, tail_chars: int = 120) -> str:
+    """长行截头保尾：头部 max_chars + 尾部 tail_chars（尾部含业务字段值特征才保留）。
+
+    业务字段值（字段[xxx]: 或 键=数字）常在 JSON 长行尾部；异常堆栈尾部（java.lang.xxx）
+    与 JSON 冒号键值（timestamp:123）不保留 —— 避免受害方连锁症状误导。
+    """
+    if len(s) <= max_chars:
+        return s
+    head = s[:max_chars]
+    tail = s[-tail_chars:]
+    if re.search(r'字段\[|=\s*-?\d+', tail):
+        return f"{head} ...{tail}"
+    return head
+
+
 def build_analysis_view(log_lines, max_key_templates: int = 1000,
                         tail_window: int = 120, noise_limit: int = 100,
                         strong_count: int = 40) -> str:
@@ -370,19 +385,28 @@ def build_analysis_view(log_lines, max_key_templates: int = 1000,
         parts.append(service_error_distribution(kts))
 
         high_value = [kt for kt in kts if not LOW_VALUE_RE.search(kt[0])]
-        strong = high_value[:strong_count] if high_value else kts[:strong_count]
+        # 字段标记模板（字段[xxx]: value —— 业务字段值/溯源提取的关键证据）优先，
+        # 防止 [x1] 单次字段行被高 count 噪声行挤出 strong 窗口
+        field_kts = [kt for kt in high_value if re.search(r'字段\[[^\]]+\]', kt[0])]
+        rest = [kt for kt in high_value if not re.search(r'字段\[[^\]]+\]', kt[0])]
+        strong = (field_kts + rest)[:strong_count]
         parts.append("")
         parts.append("[业务错误日志(高价值)]")
         for t, count, level in strong:
             prefix = f"[x{count}]" if count > 1 else "    "
-            parts.append(f"{prefix} {t[:200]}")
+            # 字段标记行保留到最后一个字段标记（业务字段值全保留，防中部字段被截断）
+            if re.search(r'字段\[[^\]]+\]', t):
+                last = t.rfind('字段[')
+                parts.append(f"{prefix} {t[:last+150]}")
+            else:
+                parts.append(f"{prefix} {_clip_line(t, max_chars=200)}")
 
     tail = compressed.get("tail_lines", [])
     if tail:
         parts.append("")
         parts.append("[日志尾部(原始,兜底信号)]")
         for line in tail[:60]:
-            parts.append(f"  {line[:200]}")
+            parts.append(f"  {_clip_line(line, max_chars=200)}")
 
     parts.append("")
     parts.append(f"// 原始 {compressed['original_lines']} 行 → 压缩后 {len(kts)} 条信号"
