@@ -56,7 +56,7 @@ def summarize_metrics(csv_path: str, inject_time: str, limit: int = 12) -> str:
     normal, anomal = df[df["time"] < inj], df[df["time"] >= inj]
     if len(normal) == 0 or len(anomal) == 0:
         return "[指标窗口异常]"
-    lines = []
+    scored = []
     for col in df.columns:
         if col == "time":
             continue
@@ -64,12 +64,15 @@ def summarize_metrics(csv_path: str, inject_time: str, limit: int = 12) -> str:
         n_max, a_max = normal[col].max(), anomal[col].max()
         if a_mean > n_mean * 1.5 and a_mean > 0.001:
             ratio = a_mean / n_mean if n_mean > 0 else float('inf')
-            lines.append(f"{col}: mean {n_mean:.3f}->{a_mean:.3f}(x{ratio:.1f})")
+            scored.append((ratio, f"{col}: mean {n_mean:.3f}->{a_mean:.3f}(x{ratio:.1f})"))
         elif a_max > n_max * 2 and a_max > 0.01:
-            lines.append(f"{col}: peak {n_max:.3f}->{a_max:.3f}")
-        if len(lines) >= limit:
+            peak_ratio = a_max / n_max if n_max > 0 else float('inf')
+            scored.append((peak_ratio, f"{col}: peak {n_max:.3f}->{a_max:.3f}"))
+        if len(scored) >= limit:
             break
-    return "\n".join(lines) if lines else "[无明显指标异常]"
+    # 按异常强度降序（xinf/ratio 最高在前 —— 最强异常是根因第一线索）
+    scored.sort(key=lambda x: -x[0])
+    return "\n".join(s for _, s in scored[:limit]) if scored else "[无明显指标异常]"
 
 
 def main():
