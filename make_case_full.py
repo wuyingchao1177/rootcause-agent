@@ -44,15 +44,28 @@ def extract_business(line: str, span_idx: int) -> str | None:
     msg = re.sub(r'(?<!\d)\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(?!\d)', '<ip>', msg)
     # 手机号脱敏（11 位 1[3-9] 开头；order_id 等 14 位长数字不受影响）
     msg = re.sub(r'(?<!\d)1[3-9]\d{9}(?!\d)', '<phone>', msg)
-    # 关键业务字段：宽松匹配（容忍 JSON 转义分隔符）
+    # 关键业务字段：宽松匹配（容忍 JSON 转义分隔符）；值排除操作符开头
+    # （assign_type != null / == 1 等是 QLE 配置表达式，非订单字段值 —— 不收，防污染）
     field_parts = []
     for f in _KEY_FIELDS:
-        for m in re.finditer(re.escape(f) + r'[^0-9A-Za-z]{0,4}[:=][^0-9A-Za-z]{0,4}([^",}\s][^",}]{0,80})', msg):
+        for m in re.finditer(re.escape(f) + r'[^0-9A-Za-z]{0,4}[:=][^0-9A-Za-z]{0,4}([^\",}\s!&|=<>\\][^\",}]{0,80})', msg):
             field_parts.append(f"字段[{f}]: {f}{m.group(0)[len(f):]}")
+    # 过滤 QLE 表达式片段（assign_type != null / == 1 等配置表达式，非订单字段值 —— 防污染）
+    field_parts = [p for p in field_parts
+                   if not re.search(r'(!=|==|!= null|== null|&&|\|\|)\s*\S|null', p)]
+    # 字段值汇总（一行全景 —— 帮助 LLM 关联同一订单的字段值，如 assign_type=2/order_status=5）
+    _summary, _seen = [], set()
+    for _p in field_parts:
+        _key = _p.split(":")[0]
+        if _key not in _seen:
+            _seen.add(_key)
+            _summary.append(_p.split(":", 1)[-1].strip())
     # 原始内容完整保留（不硬截断 —— 字段提取(field_parts)已附加保真）
     msg = msg.strip()
     if field_parts:
         msg = msg + " || " + " | ".join(field_parts[:6])
+    if _summary:
+        msg = msg + " || 字段汇总: " + " | ".join(_summary[:10])
     if not msg or msg in ("<redacted>", "null"):
         return None
     return msg
