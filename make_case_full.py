@@ -23,7 +23,10 @@ _SENSITIVE_KEYS = ("cookie", "ssoTicket", "odin_jwt_token", "secdd-authenticatio
 # 关键业务字段（出现时保留字段上下文，防截断丢失）
 _KEY_FIELDS = ["cheat", "assign_type", "nature_name", "order_status", "order_status_name",
                "level_type", "type_name", "extra_type", "order_id", "long_rent_type",
-               "business_type", "is_driver_detour_fraud"]
+               "business_type", "is_driver_detour_fraud",
+               # 指派佐证组（与 assign_type 并置 —— 订单被指派过的直接证据，
+               # 借鉴 field-source-tracing 全 trace grep 发现的 assigned_* 字段组）
+               "assigned_time", "assigned_lat", "assigned_lng", "assign_status"]
 
 
 def extract_business(line: str, span_idx: int) -> str | None:
@@ -53,7 +56,16 @@ def extract_business(line: str, span_idx: int) -> str | None:
     # 过滤 QLE 表达式片段（assign_type != null / == 1 等配置表达式，非订单字段值 —— 防污染）
     field_parts = [p for p in field_parts
                    if not re.search(r'(!=|==|!= null|== null|&&|\|\|)\s*\S|null', p)]
-    # 字段值汇总（一行全景 —— 帮助 LLM 关联同一订单的字段值，如 assign_type=2/order_status=5）
+    # 同字段去重（保留首个值 —— level_type 重复 5+ 条会挤掉 assigned_time 等佐证字段）
+    _seen_f, field_parts2 = set(), []
+    for _p in field_parts:
+        _k = _p.split(":")[0]
+        if _k not in _seen_f:
+            _seen_f.add(_k)
+            field_parts2.append(_p)
+    field_parts = field_parts2
+    # 字段值汇总（一行全景 —— 帮助 LLM 关联同一订单的字段值，如 assign_type=2/order_status=5；
+    # 全字段不截断 —— assigned_time 等佐证字段必须可见）
     _summary, _seen = [], set()
     for _p in field_parts:
         _key = _p.split(":")[0]
@@ -63,9 +75,9 @@ def extract_business(line: str, span_idx: int) -> str | None:
     # 原始内容完整保留（不硬截断 —— 字段提取(field_parts)已附加保真）
     msg = msg.strip()
     if field_parts:
-        msg = msg + " || " + " | ".join(field_parts[:6])
+        msg = msg + " || " + " | ".join(field_parts[:8])
     if _summary:
-        msg = msg + " || 字段汇总: " + " | ".join(_summary[:10])
+        msg = msg + " || 字段汇总: " + " | ".join(_summary)
     if not msg or msg in ("<redacted>", "null"):
         return None
     return msg

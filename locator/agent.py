@@ -32,14 +32,20 @@ _EVIDENCE_KEYWORDS = (
 
 def _focus_fragment(line: str, head_chars: int = 120, max_field_frags: int = 6) -> str:
     """把命中行提炼为聚焦片段（组合式，不丢关键值）：
-    - 字段值行：行首上下文 120 + 行内全部 字段[xxx]: value 片段（值全保留）
+    - 字段值行：行首上下文 120 + 字段[xxx] 片段 + 字段汇总（含 assigned_time 等佐证）
     - 配置/表达式行：qleExpression/qleCondition 附近 400 chars（含字段判定）
     - 其他：行首 180 chars
     """
     frags = re.findall(r'字段\[[^\]]+\]:[^\|]{1,80}', line)
     head = line[:head_chars]
     if frags:
-        return head + " || " + " || ".join(frags[:max_field_frags])
+        # 字段汇总（行尾，含全部字段值 —— assigned_time 等佐证字段）
+        sum_i = line.find("字段汇总:")
+        sum_part = line[sum_i:sum_i + 260] if sum_i >= 0 else ""
+        out = head + " || " + " || ".join(frags[:3])
+        if sum_part:
+            out = out + " || " + sum_part
+        return out[:600]
     for kw in ("qleExpression", "qleCondition"):
         i = line.find(kw)
         if i >= 0:
@@ -79,6 +85,30 @@ def retrieve_evidence(log_lines: list[str], keywords: list[str],
         return out
     half = max_lines // 2
     return _dedup(field_rows, half) + _dedup(other_rows, max_lines - half)
+
+
+def extract_field_summary(focus_lines: list[str], max_fields: int = 15) -> str:
+    """从聚焦证据行的'字段汇总'中确定性提取字段值清单（如 assign_type=2, order_status=5）。
+
+    程序提取（非 LLM 生成）—— 保证规则输入字段值必然呈现。
+    """
+    vals, seen = [], set()
+    for line in focus_lines:
+        i = line.find("字段汇总:")
+        if i < 0:
+            continue
+        for part in line[i + 5:].split("|"):
+            part = part.strip()
+            if "=" not in part:
+                continue
+            k, v = part.split("=", 1)
+            k, v = k.strip(), v.strip().strip('"').strip()
+            if k not in seen and v and v not in ("<redacted>", "<time>", "null"):
+                seen.add(k)
+                vals.append(f"{k}={v}")
+        if len(vals) >= max_fields:
+            break
+    return ", ".join(vals)
 
 
 def get_llm():
@@ -255,8 +285,9 @@ def analyze_root_cause(problem: dict, log_analysis: dict,
         "orderProxyService.getOrderInfo(L824) 返回订单原始数据 → propertyQueryService.query(\"bwh.order\")(L825) 拉取规则配置 → "
         "invokeStrategyService.invokeStrategy 执行规则 → response.toJavaObject 映射字段），并标注字段**来源类型**"
         "（TRANSFORMED=规则/策略计算 / DB=直接映射 / 透传=上游返回）；② 必须展开拼接/计算逻辑（循环每个规则、命中条件、"
-        "返回值、分隔符与拼接方式，如 StringUtils.join(tags, separatorName)）；③ 必须列出规则**输入字段值**"
-        "（来自字段汇总行/字段[xxx]行，如 assign_type=2）并逐条说明其如何触发规则\n"
+        "返回值、分隔符与拼接方式，如 StringUtils.join(tags, separatorName)）；③ **必须**引用规则**输入字段值**"
+        "（来自聚焦证据中的'规则输入字段值'清单与字段汇总行，逐条说明其如何触发规则）；输入字段值是规则判定的输入证据，"
+        "**必须出现在 ① 根因链或 ② 关键证据中**，遗漏视为分析不完整\n"
         "2. 每条结论必须引用具体证据（日志行、代码行），禁止无证据断言\n"
         "3. 置信度分级：高（证据直接命中）/ 中（多处间接证据）/ 低（推断）；推断必须与有据结论显式分开标注\n"
         "4. errno 语义护栏：遇到返回空/空列表/空串时，先看 errno/statusCode —— "
@@ -286,6 +317,12 @@ def analyze_root_cause(problem: dict, log_analysis: dict,
         if focus_lines:
             context.append("## 聚焦证据（按关键词检索的相关日志行）")
             context.extend(focus_lines)
+            # 规则输入字段值清单（程序从字段汇总确定性提取 —— 保证 assign_type=2
+            # 等关键值必然呈现，不依赖 LLM 提取/引用）
+            vals = extract_field_summary(focus_lines)
+            if vals:
+                context.append("")
+                context.append(f"## 规则输入字段值（程序提取，规则判定输入）: {vals}")
             context.append("")
     except Exception:
         pass
@@ -355,6 +392,20 @@ def locate_root_cause(problem_text: str, log_lines: list[str],
         code_contexts = locate_code(repo_root, problem["keywords"], stack_trace)
     # L3
     root_cause = analyze_root_cause(problem, log_analysis, code_contexts, runtime_data)
+
+    # 严谨性兜底：若输出未引用规则输入字段值（如 assign_type=2），程序追加字段值补充块。
+    # LLM 指令遵循不稳定时保证输出必然包含字段值（确定性），诚实标注程序提取来源。
+    try:
+        _focus = retrieve_evidence(log_lines, problem["keywords"])
+        _vals = extract_field_summary(_focus)
+        if _vals:
+            _cited = all(v in root_cause for v in _vals.split(", "))
+            if not _cited:
+                root_cause += (f"\n\n---\n### 规则输入字段值补充（程序提取，供核验）\n"
+                               f"以下为日志字段汇总中的规则输入字段值（规则判定输入，LLM 分析未全部引用，"
+                               f"程序补充完整清单）：\n{_vals}\n")
+    except Exception:
+        pass
 
     # Token 估算
     total_input_chars = (
