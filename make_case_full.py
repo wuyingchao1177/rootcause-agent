@@ -20,13 +20,12 @@ _SENSITIVE_KEYS = ("cookie", "ssoTicket", "odin_jwt_token", "secdd-authenticatio
                    "clientIp", "client_ip", "x-real-ip", "x-real-port")
 
 
-# 关键业务字段（出现时保留字段上下文，防截断丢失）
+# 关键业务字段（出现时保留字段上下文，防截断丢失；
+# 通用高频字段表 —— 字段提取不写死具体业务字段名，聚焦证据/字段汇总
+# 从行内出现的任意字段自动提取（见 build_analysis_view 的字段值汇总）
 _KEY_FIELDS = ["cheat", "assign_type", "nature_name", "order_status", "order_status_name",
                "level_type", "type_name", "extra_type", "order_id", "long_rent_type",
-               "business_type", "is_driver_detour_fraud",
-               # 指派佐证组（与 assign_type 并置 —— 订单被指派过的直接证据，
-               # 借鉴 field-source-tracing 全 trace grep 发现的 assigned_* 字段组）
-               "assigned_time", "assigned_lat", "assigned_lng", "assign_status"]
+               "business_type", "is_driver_detour_fraud"]
 
 
 def extract_business(line: str, span_idx: int) -> str | None:
@@ -56,7 +55,7 @@ def extract_business(line: str, span_idx: int) -> str | None:
     # 过滤 QLE 表达式片段（assign_type != null / == 1 等配置表达式，非订单字段值 —— 防污染）
     field_parts = [p for p in field_parts
                    if not re.search(r'(!=|==|!= null|== null|&&|\|\|)\s*\S|null', p)]
-    # 同字段去重（保留首个值 —— level_type 重复 5+ 条会挤掉 assigned_time 等佐证字段）
+    # 同字段去重（保留每个字段首个值 —— 重复提取会挤掉后续字段）
     _seen_f, field_parts2 = set(), []
     for _p in field_parts:
         _k = _p.split(":")[0]
@@ -64,8 +63,8 @@ def extract_business(line: str, span_idx: int) -> str | None:
             _seen_f.add(_k)
             field_parts2.append(_p)
     field_parts = field_parts2
-    # 字段值汇总（一行全景 —— 帮助 LLM 关联同一订单的字段值，如 assign_type=2/order_status=5；
-    # 全字段不截断 —— assigned_time 等佐证字段必须可见）
+    # 字段值汇总（一行全景 —— 帮助 LLM 关联同一对象的字段值；
+    # 全字段不截断 —— 所有字段值可见）
     _summary, _seen = [], set()
     for _p in field_parts:
         _key = _p.split(":")[0]

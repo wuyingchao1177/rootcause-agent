@@ -32,14 +32,14 @@ _EVIDENCE_KEYWORDS = (
 
 def _focus_fragment(line: str, head_chars: int = 120, max_field_frags: int = 6) -> str:
     """把命中行提炼为聚焦片段（组合式，不丢关键值）：
-    - 字段值行：行首上下文 120 + 字段[xxx] 片段 + 字段汇总（含 assigned_time 等佐证）
+    - 字段值行：行首上下文 120 + 字段[xxx] 片段 + 字段汇总（全部字段值）
     - 配置/表达式行：qleExpression/qleCondition 附近 400 chars（含字段判定）
     - 其他：行首 180 chars
     """
     frags = re.findall(r'字段\[[^\]]+\]:[^\|]{1,80}', line)
     head = line[:head_chars]
     if frags:
-        # 字段汇总（行尾，含全部字段值 —— assigned_time 等佐证字段）
+        # 字段汇总（行尾，含全部字段值）
         sum_i = line.find("字段汇总:")
         sum_part = line[sum_i:sum_i + 260] if sum_i >= 0 else ""
         out = head + " || " + " || ".join(frags[:3])
@@ -88,7 +88,7 @@ def retrieve_evidence(log_lines: list[str], keywords: list[str],
 
 
 def extract_field_summary(focus_lines: list[str], max_fields: int = 15) -> str:
-    """从聚焦证据行的'字段汇总'中确定性提取字段值清单（如 assign_type=2, order_status=5）。
+    """从聚焦证据行的'字段汇总'中确定性提取字段值清单（如 字段名=值）。
 
     程序提取（非 LLM 生成）—— 保证规则输入字段值必然呈现。
     """
@@ -282,10 +282,10 @@ def analyze_root_cause(problem: dict, log_analysis: dict,
         "要求：\n"
         "1. 按七节模板输出根因分析：① 根因链（触发条件→直接原因→根本原因）② 关键证据 ③ 定位置信度 ④ 修复建议 ⑤ 仍缺的数据 ⑥ 排除的假设 ⑦ 一句话结论\n"
         "1b. 字段溯源/规则计算类问题（字段值由规则/策略/映射生成时）：① 必须给出**完整代码路径**（每个方法名+行号+每步作用，如："
-        "orderProxyService.getOrderInfo(L824) 返回订单原始数据 → propertyQueryService.query(\"bwh.order\")(L825) 拉取规则配置 → "
-        "invokeStrategyService.invokeStrategy 执行规则 → response.toJavaObject 映射字段），并标注字段**来源类型**"
+        "service.getDetail(param)(L824) 返回原始数据 → ruleConfigService.load(ruleKey)(L825) 拉取规则/策略配置 → "
+        "ruleEngine.execute(data, ruleConfig) 执行规则 → response.toJavaObject 映射字段），并标注字段**来源类型**"
         "（TRANSFORMED=规则/策略计算 / DB=直接映射 / 透传=上游返回）；② 必须展开拼接/计算逻辑（循环每个规则、命中条件、"
-        "返回值、分隔符与拼接方式，如 StringUtils.join(tags, separatorName)）；③ **必须**引用规则**输入字段值**"
+        "返回值、分隔符与拼接方式，如 join(tags, separator)）；③ **必须**引用规则**输入字段值**"
         "（来自聚焦证据中的'规则输入字段值'清单与字段汇总行，逐条说明其如何触发规则）；输入字段值是规则判定的输入证据，"
         "**必须出现在 ① 根因链或 ② 关键证据中**，遗漏视为分析不完整\n"
         "2. 每条结论必须引用具体证据（日志行、代码行），禁止无证据断言\n"
@@ -294,12 +294,12 @@ def analyze_root_cause(problem: dict, log_analysis: dict,
         "errno=0 且空 = 业务事实空（用户确实无此数据，接口正常）；errno≠0 且空 = 接口/配置故障；"
         "禁止把'业务空'误判为'接口故障'，反之亦然\n"
         "5. 信息不足时明确指出还需要什么数据，标注 UNKNOWN，不要臆测\n"
-        "6. 验证边界（字段溯源/配置类问题必做）：若结论依赖外部配置/规则（如 QLE 表达式、策略配置、"
+        "6. 验证边界（字段溯源/配置类问题必做）：若结论依赖外部配置/规则（如规则/策略表达式、策略配置、"
         "数据源配置），先检查代码 import/依赖线索（运行时数据中 '依赖/import' 区与文件头）推断配置存储位置，"
         "并显式标注：哪些已直接验证、哪些未直接验证（⚠️）、如何人工核实（登录哪个平台/查哪个 key）\n"
         "7. 字段溯源/策略命中类问题：日志中的 '字段汇总' 行与 '字段[xxx]:' 行是订单/请求的核心字段值，"
-        "也是 QLE 表达式/策略判定的输入 —— 分析策略为何命中时，必须先列出相关字段值（如 assign_type=2）"
-        "再对照 QLE 条件判断，禁止跳过字段值直接下结论\n"
+        "也是规则/策略表达式判定的输入 —— 分析策略为何命中时，必须先列出相关字段值（如关键字段=值）"
+        "再对照规则条件判断，禁止跳过字段值直接下结论\n"
     )
 
     context = []
@@ -317,8 +317,8 @@ def analyze_root_cause(problem: dict, log_analysis: dict,
         if focus_lines:
             context.append("## 聚焦证据（按关键词检索的相关日志行）")
             context.extend(focus_lines)
-            # 规则输入字段值清单（程序从字段汇总确定性提取 —— 保证 assign_type=2
-            # 等关键值必然呈现，不依赖 LLM 提取/引用）
+            # 规则输入字段值清单（程序从字段汇总确定性提取 —— 保证关键字段值
+            # 必然呈现，不依赖 LLM 提取/引用）
             vals = extract_field_summary(focus_lines)
             if vals:
                 context.append("")
@@ -393,7 +393,7 @@ def locate_root_cause(problem_text: str, log_lines: list[str],
     # L3
     root_cause = analyze_root_cause(problem, log_analysis, code_contexts, runtime_data)
 
-    # 严谨性兜底：若输出未引用规则输入字段值（如 assign_type=2），程序追加字段值补充块。
+    # 严谨性兜底：若输出未引用规则输入字段值，程序追加字段值补充块。
     # LLM 指令遵循不稳定时保证输出必然包含字段值（确定性），诚实标注程序提取来源。
     try:
         _focus = retrieve_evidence(log_lines, problem["keywords"])
