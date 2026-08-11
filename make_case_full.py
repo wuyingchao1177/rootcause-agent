@@ -42,6 +42,8 @@ def extract_business(line: str, span_idx: int) -> str | None:
         msg = re.sub(rf'({k}[^=]*=)[^\s|}}]+', rf'\1<redacted>', msg)
     # 内网/公网 IP 脱敏（url/host 等字段；保留手机号段外的纯 IP）
     msg = re.sub(r'(?<!\d)\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(?!\d)', '<ip>', msg)
+    # 手机号脱敏（11 位 1[3-9] 开头；order_id 等 14 位长数字不受影响）
+    msg = re.sub(r'(?<!\d)1[3-9]\d{9}(?!\d)', '<phone>', msg)
     # 关键业务字段：宽松匹配（容忍 JSON 转义分隔符）
     field_parts = []
     for f in _KEY_FIELDS:
