@@ -378,6 +378,23 @@ def build_analysis_view(log_lines, max_key_templates: int = 1000,
     parts = [f"Log Summary: {stats.get('ERROR', 0)} errors, {stats.get('WARN', 0)} warnings, "
              f"{stats.get('INFO', 0)} info"]
 
+    # 字段值汇总区块（前置 —— 订单/请求核心字段值，规则判定输入，LLM 第一眼可见）
+    field_rows = [kt[0] for kt in compressed["key_templates"] if re.search(r'字段\[[^\]]+\]', kt[0])]
+    if field_rows:
+        seen, summary = set(), []
+        for row in field_rows:
+            for m in re.finditer(r'字段\[([^\]]+)\]:\s*([^\|]{1,60})', row):
+                fname, fval = m.group(1), m.group(2).strip()
+                # 值清洗：去掉字段名前缀重复与转义引号（assign_type":"2 → 2）
+                fval = re.sub(rf'^{re.escape(fname)}\s*[":=\\]*\s*', '', fval)
+                fval = fval.replace('\\"', '').replace('\\', '').strip('"').strip()
+                if fname not in seen:
+                    seen.add(fname)
+                    summary.append(f"{fname}={fval}")
+        if summary:
+            parts.append("")
+            parts.append("[字段值汇总(规则判定输入)] " + " | ".join(summary[:15]))
+
     kts = compressed["key_templates"]
     if kts:
         parts.append("")
@@ -394,10 +411,12 @@ def build_analysis_view(log_lines, max_key_templates: int = 1000,
         parts.append("[业务错误日志(高价值)]")
         for t, count, level in strong:
             prefix = f"[x{count}]" if count > 1 else "    "
-            # 字段标记行保留到最后一个字段标记（业务字段值全保留，防中部字段被截断）
+            # 字段标记行保留到最后一个字段标记（业务字段值全保留，防中部字段被截断）；
+            # 但配置全文（如 81K 的 qleExpression JSON）加合理上限 —— 截头保尾 2500，
+            # 防超长行撑爆视图导致 LLM 注意力失效（信息过载与硬截断是两个极端）
             if re.search(r'字段\[[^\]]+\]', t):
                 last = t.rfind('字段[')
-                parts.append(f"{prefix} {t[:last+150]}")
+                parts.append(f"{prefix} {_clip_line(t[:last+150], max_chars=2500, tail_chars=400)}")
             else:
                 parts.append(f"{prefix} {_clip_line(t, max_chars=200)}")
 
