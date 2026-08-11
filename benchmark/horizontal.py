@@ -118,7 +118,7 @@ def call_llm(llm, prompt: str) -> str:
 
 
 def judge(llm, answer: str, ground_truth: dict) -> float:
-    """LLM-as-judge 评分 0~1。"""
+    """LLM-as-judge 评分 0~1（rubric 锚点 + 截断 6000）。"""
     from langchain_core.messages import HumanMessage, SystemMessage
     judge_prompt = f"""你是评分裁判。判断 AI 的根因分析是否正确。
 
@@ -126,9 +126,14 @@ def judge(llm, answer: str, ground_truth: dict) -> float:
 根因关键词: {", ".join(ground_truth.get("keywords", []))}
 
 AI 的分析:
-{answer[:1500]}
+{answer[:6000]}
 
-只输出 JSON: {{"score": 0.0~1.0}}"""
+评分规则（严格）:
+- 1.0: 机制/结论与真实根因一致（关键证据链命中）
+- 0.5: 方向部分正确（机制有出入或缺关键环节）
+- 0.0: 无关/错误结论
+
+只输出 JSON: {{"score": 0.0 或 0.5 或 1.0}}"""
     try:
         result = llm.invoke([
             SystemMessage(content="你是根因分析评分裁判，只输出 JSON。"),
@@ -170,19 +175,26 @@ def run_horizontal_benchmark(cases: list[dict], methods: list[str]) -> dict:
             prompt = all_prompts[method][i]["prompt"]
             tokens_in = len(prompt) // 2
 
-            print(f"  ⏳ {method} ({tokens_in} tok in)...")
-            answer = call_llm(llm, prompt)
-            score = judge(llm, answer, case["ground_truth"])
+            # 3 次生成 × 判分 → 中位数（抑制 LLM 生成非确定性导致的判分波动）
+            print(f"  ⏳ {method} ({tokens_in} tok in) ×3...")
+            scores, last_answer = [], ""
+            for _round in range(3):
+                answer = call_llm(llm, prompt)
+                last_answer = answer
+                scores.append(judge(llm, answer, case["ground_truth"]))
+            scores.sort()
+            score = scores[1]  # 中位数
 
             rows.append({
                 "case_id": case["id"],
                 "method": method,
                 "tokens_in": tokens_in,
-                "tokens_out": len(answer) // 2,
-                "tokens_total": tokens_in + len(answer) // 2,
+                "tokens_out": len(last_answer) // 2,
+                "tokens_total": tokens_in + len(last_answer) // 2,
                 "score": score,
+                "scores": scores,
                 "reduction_vs_baseline": 1 - (tokens_in / max(baseline_tokens[i], 1)),
-                "answer_preview": answer[:200],
+                "answer_preview": last_answer[:200],
             })
 
     # 汇总: 每个 method 的平均
