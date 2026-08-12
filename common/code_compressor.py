@@ -94,7 +94,7 @@ def compress_code(source: str, file_path: str = "",
     if not signatures:
         signatures = extract_java_signatures(source)
 
-    # 2. 找出关键行（关键词命中 + 栈 focus 行 + 异常/日志相关）
+    # 2. 找出关键行（关键词命中 + 栈 focus 行 + 异常/日志相关 + 控制流/拼接逻辑）
     key_line_idx = set()
     for i, line in enumerate(lines):
         low = line.lower()
@@ -102,6 +102,12 @@ def compress_code(source: str, file_path: str = "",
             key_line_idx.add(i)
             continue
         if re.search(r'(?i)\b(error|exception|raise|log(ger)?\.\w+|print\(|return None|assert)\b', line):
+            key_line_idx.add(i)
+            continue
+        # 控制流与拼接逻辑行（for/while 循环、join/add/put/append/separator 拼接、
+        # 条件返回 —— 规则/策略计算的核心机制，压缩掉会导致拼接逻辑不可见）
+        if re.search(r'(?i)(^\s*(for|while|foreach|if|else if|return)\b|'
+                     r'\b(join|tags\.add|\.add\(|\.put\(|append|separator|concat|collect|expressionImplement)\b)', line):
             key_line_idx.add(i)
 
     # 栈 focus 行及其上下文
