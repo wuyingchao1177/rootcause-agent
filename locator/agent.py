@@ -298,7 +298,8 @@ def analyze_root_cause(problem: dict, log_analysis: dict,
         "1. 输出模板（按问题类型选择其一）：\n"
         "  - 字段溯源类问题（问'字段 X 为什么是 Y'，含字段值/标签/枚举来源问题）：**必须**按溯源模板输出七节："
         "① 来源类型（HTTP_RESPONSE=透传 / TRANSFORMED=规则/策略计算 / DB 映射 / UNKNOWN）② 入口接口（API 路径 + traceId + 入参 key=value）"
-        "④ 完整规则（完整代码路径：每步方法名+行号+入参+返回；"
+        "④ 完整规则（完整代码路径：**每步标注 类名.方法名(行号)**，跨文件跳转必须写清所在类，"
+        "如 BwhOrderServiceImpl.fillOrderType(L706)；每步附入参/返回与作用；"
         "计算/拼接逻辑：循环、命中条件、返回值、分隔符与 join 方式；本 trace 实际数据：字段值如何逐条触发规则→返回标签）。"
         "**机制判定**：若代码中出现规则/策略引擎模式（按配置循环执行表达式、命中拼接、写入目标字段、"
         "execute/evaluate/expression/join(separator) 等通用模式），说明字段由规则引擎按配置计算，采用该机制并给出拼接伪代码；"
@@ -447,18 +448,16 @@ def locate_root_cause(problem_text: str, log_lines: list[str],
         if _vals:
             _cited = all(v in root_cause for v in _vals.split(", "))
             if not _cited:
-                root_cause += (f"\n\n---\n### 规则输入字段值补充（程序提取，供核验）\n"
-                               f"以下为日志字段汇总中的规则输入字段值（规则判定输入，LLM 分析未全部引用，"
-                               f"程序补充完整清单）：\n{_vals}\n")
+                root_cause += (f"\n\n---\n### 附：日志中的核心字段值清单（规则判定输入，供人工核验）\n{_vals}\n")
         # 机制事实兜底：配置中存在目标字段的属性管理器定义（name + 规则表达式），
         # 但输出未按规则引擎机制解释 → 程序追加机制事实（确定性，诚实标注）。
         # 借鉴 field-source Step 6.1 的确定性判定：配置驱动字段 = 规则引擎计算
         _cfg = [l.split("] ")[0].replace("[CFG:", "") for l in _focus if l.startswith("[CFG:")]
         if _cfg and not any(k in root_cause for k in
                             ("expressionImplement", "origin.put", "invokeStrategy", "规则引擎")):
-            root_cause += (f"\n\n---\n### 机制事实补充（程序提取，供核验）\n"
+            root_cause += (f"\n\n---\n### 附：配置证据（日志中字段的属性/规则定义）\n"
                            f"配置/日志中存在字段的属性管理器定义：{', '.join(sorted(set(_cfg)))}"
-                           f"（name 字段 + qleKeys/fieldsList 规则表达式）→ 这些字段由规则引擎按配置计算生成"
+                           f"（name 字段 + 规则表达式）→ 这些字段由规则引擎按配置计算生成"
                            f"（配置驱动字段生成），分析机制时以此为准\n")
     except Exception:
         pass
