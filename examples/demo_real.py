@@ -58,7 +58,7 @@ def evaluate_match(ai_text: str, evidence_words: list[str]) -> dict:
     }
 
 
-def run_case(case: dict, repo_root: str = "/Users/didi/IdeaProjects/sail2026") -> dict:
+def run_case(case: dict, repo_root: str = "") -> dict:
     cid = case["id"]
     print("=" * 74)
     print(f"📋 CASE: {cid}")
@@ -82,7 +82,7 @@ def run_case(case: dict, repo_root: str = "/Users/didi/IdeaProjects/sail2026") -
     r = locate_root_cause(
         problem_text=case["problem"],
         log_lines=case["logs"],
-        repo_root=repo_root,
+        repo_root=repo_root or "/nonexistent-rca-demo",  # 空则不读代码仓库，代码走 runtime_data
         runtime_data=rd,
     )
     ai_text = r["root_cause"]
@@ -111,7 +111,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--case", default=None, help="case 名（如 case_5 / case_6）")
     ap.add_argument("--all", action="store_true", help="跑全部真实 case")
-    ap.add_argument("--repo-root", default="/Users/didi/IdeaProjects/sail2026", help="代码仓库根目录")
+    ap.add_argument("--repo-root", default="", help="代码仓库根目录（可选，不传则用 case 内置 code_files）")
     args = ap.parse_args()
 
     cases = load_cases(args.case if not args.all else None)
