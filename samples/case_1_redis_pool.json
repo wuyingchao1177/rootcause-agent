@@ -4811,7 +4811,7 @@
   "2026-07-28 10:48:00 WARN  OrderService fallback: redis unavailable, use local cache"
  ],
  "code_files": [
-  "/Users/didi/claudecodeAndHermessAndObsidian/Skills & Tools/rootcause-agent/samples/case1_code.py"
+  "/data/claudecodeAndHermessAndObsidian/Skills & Tools/rootcause-agent/samples/case1_code.py"
  ],
  "ground_truth": {
   "root_cause": "Redis 连接池配置 max_connections=10 过小，批量查询导致连接耗尽",

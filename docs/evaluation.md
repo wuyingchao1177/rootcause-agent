@@ -149,7 +149,7 @@ RootCause Agent 横向评测报告 —— 对应 [design.md](design.md) 第 4 �
 
 ### 6.4 自建 benchmark（7 case：4 个样例 + 3 个真实业务字段溯源）
 
-> 口径说明：早期 4 case（样例日志）为简单 prompt 链路，ours 87.5%；当前为 7 case（含滴滴客服真实业务 trace 字段溯源：case_5 订单性质 / case_6 作弊字段 / case_7 订单状态）+ 增强 prompt（字段溯源模板 + 验证边界 + 字段值引导）+ 原始版日志（31 span 全量，字段值汇总行 + QLE 表达式过滤 + 聚焦证据检索）+ **判分稳定性改进**（rubric 锚点 + 答案截断 6000 + 3 次生成取中位数）+ **最终回归重测**（本轮最新代码状态，零代码改动）后实测如下。
+> 口径说明：早期 4 case（样例日志）为简单 prompt 链路，ours 87.5%；当前为 7 case（含真实业务 trace 字段溯源：case_5 订单性质 / case_6 作弊字段 / case_7 订单状态）+ 增强 prompt（字段溯源模板 + 验证边界 + 字段值引导）+ 原始版日志（31 span 全量，字段值汇总行 + QLE 表达式过滤 + 聚焦证据检索）+ **判分稳定性改进**（rubric 锚点 + 答案截断 6000 + 3 次生成取中位数）+ **最终回归重测**（本轮最新代码状态，零代码改动）后实测如下。
 
 | 方法 | 正确率（3 次中位数） | token 压缩率 | avg_tokens |
 |---|---|---|---|
@@ -164,7 +164,7 @@ RootCause Agent 横向评测报告 —— 对应 [design.md](design.md) 第 4 �
 
 ※ rtk 0.3.14 旧版二进制异常（评测口径 0.44.2 待恢复），分数不可信。
 
-**口径说明**：7 case（含滴滴客服真实业务 trace 字段溯源：case_5 订单性质 / case_6 作弊字段 / case_7 订单状态）+ 增强 prompt（字段溯源模板 + 验证边界 + 字段值引导）+ 原始版日志（31 span 全量，字段值汇总行 + QLE 表达式过滤）+ 判分稳定性（rubric 锚点 + 6000 截断 + 3 次生成中位数）。
+**口径说明**：7 case（含真实业务 trace 字段溯源：case_5 订单性质 / case_6 作弊字段 / case_7 订单状态）+ 增强 prompt（字段溯源模板 + 验证边界 + 字段值引导）+ 原始版日志（31 span 全量，字段值汇总行 + QLE 表达式过滤）+ 判分稳定性（rubric 锚点 + 6000 截断 + 3 次生成中位数）。
 
 **判分稳定性说明（实测）**：LLM-as-judge 无 rubric 时轮间波动 ±20pt（baseline 51→61→80）；改进后（rubric 1.0/0.5/0.0 锚点 + 6000 截断 + 3 次生成中位数）3 次判分基本一致。case 明细（本轮最终回归）：case_1/2/4/6/7 = 100%（3 次一致）；case_3 = 0.5（ground_truth 表述"队列默认无界"与日志明确 `queue capacity=100` 矛盾，AI 引用日志原文正确，judge 按 ground_truth 措辞判"部分"—— 判分口径问题，非 AI 错误）；case_5 = 0.5（rubric"机制链部分覆盖"，历史稳定）。
 
@@ -194,15 +194,15 @@ RootCause Agent 横向评测报告 —— 对应 [design.md](design.md) 第 4 �
 
 ### 6.7 真实业务 Demo 对照（3 case，AI 定位 vs 人工字段溯源）
 
-真实业务案例（滴滴客服工作台订单查询 traceId 0ab688896a797486aa55d190d44c4102，同一 trace 三问）：
+真实业务案例（客服工作台订单查询 traceId 0ab688896a797486aa55d190d44c4102，同一 trace 三问）：
 
 | case | 问题 | 人工 ground_truth（字段溯源） | AI 定位（全链路） | 一致性 |
 |---|---|---|---|---|
-| case_5_order_nature | nature_name 为什么含"指派订单" | QLE 规则：assign_type=2 → 映射 order_type=7 → Apollo 枚举"指派订单" → APPEND 拼接 | 同一机制链，点名 QLE + EternalPose 核实路径 | ✅ 一致 |
+| case_5_order_nature | nature_name 为什么含"指派订单" | QLE 规则：assign_type=2 → 映射 order_type=7 → Apollo 枚举"指派订单" → APPEND 拼接 | 同一机制链，点名 QLE + RulesEngine 核实路径 | ✅ 一致 |
 | case_6_cheat_field | 为什么 cheat=false | 反作弊接口未调用（checkOrderCheatInfo 仅 levelType==101 特快单调用，本单 level_type=0）| 同机制 + "假阴性"洞察 + 唯一赋值入口证据 | ✅ 一致 |
-| case_7_order_status | 为什么订单完成 | order_status=5 → orderEnum 从 Apollo ark_order_config 查 key"5" → 订单完成 | 同机制 + Apollo 控制台核实路径 | ✅ 一致 |
+| case_7_order_status | 为什么订单完成 | order_status=5 → orderEnum 从 Apollo order_type_config 查 key"5" → 订单完成 | 同机制 + Apollo 控制台核实路径 | ✅ 一致 |
 
-- 验证边界自动标注：三 case 均输出"已直接验证 / 未直接验证 / 人工核实方式"（如"登录 EternalPose 查询 bwh.order 策略""登录 Apollo 控制台查看 ark_order_config"）—— 从代码 import 依赖（eternalpose SDK 包名）与 Apollo 配置拉取日志推断，与人工溯源建议一致。
+- 验证边界自动标注：三 case 均输出"已直接验证 / 未直接验证 / 人工核实方式"（如"登录 RulesEngine 查询 alpha.order 策略""登录 Apollo 控制台查看 order_type_config"）—— 从代码 import 依赖（rulesengine SDK 包名）与 Apollo 配置拉取日志推断，与人工溯源建议一致。
 - 原始日志验证：222 条/48 span 原始 trace 经记录级过滤（空业务标识 span 整组跳过，48→31 对齐 log_search trace_detail）+ 信号回收（被过滤 span 中 Apollo 配置拉取等业务信号保留为附加证据）+ 全量脱敏（IP/cookie/token/手机号零残留）；三 case 在原始版日志下定位结论与人工一致。
 - 数据保真链路：响应体业务字段（assign_type/nature_name/cheat/level_type/order_status 等）在 case 构建时提取保留（字段值 MUST-KEEP），LLM 直接引用字段值作为头号证据。
 - **输出格式（人可直接阅读的字段溯源模板，对齐 field-source-tracing finalAnalysis）**：字段溯源类问题按七节输出 —— ① 来源类型（HTTP_RESPONSE 透传 / TRANSFORMED 规则计算 / DB 映射 / UNKNOWN）② 入口接口（API 路径 + traceId + 入参）③ 下游条件来源（下游接口/配置平台/缓存 key）④ 完整规则（完整代码路径：每步类名.方法名(行号) + 拼接/计算伪代码 + 本 trace 实际数据触发表）⑤ 最终输出值 ⑥ DB 映射（无则 N/A）⑦ 置信度（高/中/低 + 已直接验证/未直接验证⚠️/人工核实方式）。case_5 实测输出：代码路径含 invokeStrategyV2 L143-155 的 APPEND 拼接伪代码（for 循环 + expressionImplement + tags.add + StringUtils.join(separatorName) + origin.put(nature_name)），与人工溯源结论逐行一致。

@@ -3111,7 +3111,7 @@
   "2026-07-28 14:30:04 WARN  Async task dropped: task_31719"
  ],
  "code_files": [
-  "/Users/didi/claudecodeAndHermessAndObsidian/Skills & Tools/rootcause-agent/samples/case3_code.py"
+  "/data/claudecodeAndHermessAndObsidian/Skills & Tools/rootcause-agent/samples/case3_code.py"
  ],
  "ground_truth": {
   "root_cause": "线程池 max_workers=200 且队列容量默认无界场景下，大促提交量超阈值触发拒绝策略（默认 AbortPolicy）",

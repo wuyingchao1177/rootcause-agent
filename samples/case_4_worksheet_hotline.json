@@ -12,11 +12,11 @@
  "logs": [
   "2026-08-04 11:23:43.156 INFO  [workbench-sf-d50bd] [0aac90c86a715b3f4a3ac41919cf0202] getLatestUnclosedWorksheetByHotline 请求入参: phone=00016032119, callId=000803b2225fce2a",
   "2026-08-04 11:23:43.160 INFO  [workbench-sf-d50bd] [0aac90c86a715b3f4a3ac41919cf0202] 查询条件: createTime=[2026-07-30 11:23:43, 2026-08-04 11:23:43], processStateSet=1,2(未关闭), orderBy=create_time desc, limit=1, page=1",
-  "2026-08-04 11:23:43.192 INFO  [workbench-sf-d50bd] [0aac90c86a715b3f4a3ac41919cf0202] keel ES查询 /sail/keel/api/worksheet/es/pageQueryByCondition 返回: errno=0 count=1",
+  "2026-08-04 11:23:43.192 INFO  [workbench-sf-d50bd] [0aac90c86a715b3f4a3ac41919cf0202] sec ES查询 /sec/api/worksheet/es/pageQueryByCondition 返回: errno=0 count=1",
   "2026-08-04 11:23:43.192 INFO  [workbench-sf-d50bd] [0aac90c86a715b3f4a3ac41919cf0202] ES命中工单: worksheet_id=2578853372 phone=00016032119 call_id=000803b2225fce2a process_state=2 process_stage=3 create_time=2026-08-04 11:21:50 close_time=1971-01-01 00:00:00 valid=1",
-  "2026-08-04 11:23:43.206 INFO  [workbench-sf-d50bd] [0aac90c86a715b3f4a3ac41919cf0202] keel详情查询 /sail/keel/api/worksheet/queryWorksheetInfoById 返回: errno=0 worksheet_id=2578853372 close_time='' process_state=2",
-  "2026-08-04 11:23:43.216 INFO  [workbench-sf-d50bd] [0aac90c86a715b3f4a3ac41919cf0202] keel扩展查询 /sail/keel/api/worksheet/queryExtraById 返回: errno=0",
-  "2026-08-04 11:23:43.287 INFO  [workbench-sf-d50bd] [0aac90c86a715b3f4a3ac41919cf0202] keel optimus查询 /sail/keel/api/worksheet/optimus/pageQueryByCondition 返回: errno=0 count=0",
+  "2026-08-04 11:23:43.206 INFO  [workbench-sf-d50bd] [0aac90c86a715b3f4a3ac41919cf0202] sec详情查询 /sec/api/worksheet/queryWorksheetInfoById 返回: errno=0 worksheet_id=2578853372 close_time='' process_state=2",
+  "2026-08-04 11:23:43.216 INFO  [workbench-sf-d50bd] [0aac90c86a715b3f4a3ac41919cf0202] sec扩展查询 /sec/api/worksheet/queryExtraById 返回: errno=0",
+  "2026-08-04 11:23:43.287 INFO  [workbench-sf-d50bd] [0aac90c86a715b3f4a3ac41919cf0202] sec optimus查询 /sec/api/worksheet/optimus/pageQueryByCondition 返回: errno=0 count=0",
   "2026-08-04 11:23:43.310 INFO  [workbench-sf-d50bd] [0aac90c86a715b3f4a3ac41919cf0202] getLatestUnclosedWorksheetByHotline 响应: data=[], errmsg=SUCCESS",
   "2026-08-04 11:23:00.000 INFO  [workbench-sf-d50bd] [0aac90c86a715b3f4a3ac41919cf0202] heartbeat ok, threadPool active=0 queue=0",
   "2026-08-04 11:23:01.007 INFO  [workbench-sf-d50bd] [0aac90c86a715b3f4a3ac41919cf0202] heartbeat ok, threadPool active=1 queue=1",
@@ -220,8 +220,8 @@
   "2026-08-04 11:23:19.393 INFO  [workbench-sf-d50bd] [0aac90c86a715b3f4a3ac41919cf0202] heartbeat ok, threadPool active=9 queue=49"
  ],
  "code_files": [
-  "/Users/didi/IdeaProjects/sail2026/workbench/src/main/java/com/xiaoju/sail/workbench/biz/worksheet/service/impl/SecondLineWorksheetServiceImpl.java",
-  "/Users/didi/IdeaProjects/sail2026/common-service/src/main/java/com/xiaoju/sail/workbench/common/service/impl/WorksheetServiceImpl.java"
+  "/data/repo/workbench/src/main/java/com/example/workbench/biz/worksheet/service/impl/SecondLineWorksheetServiceImpl.java",
+  "/data/repo/common-service/src/main/java/com/example/workbench/common/service/impl/WorksheetServiceImpl.java"
  ],
  "ground_truth": {
   "root_cause": "ES 索引命中工单(worksheet_id=2578853372, process_state=2 未关闭, 条件全部匹配)，但 optimus 存储查询返回 count=0，工单在两个数据源之间不一致（ES 已同步、optimus 未同步/延迟），导致接口二次过滤后返回空",

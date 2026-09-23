@@ -2812,7 +2812,7 @@
   "2026-07-28 11:21:51 INFO  Heartbeat ok"
  ],
  "code_files": [
-  "/Users/didi/claudecodeAndHermessAndObsidian/Skills & Tools/rootcause-agent/samples/case2_code.py"
+  "/data/claudecodeAndHermessAndObsidian/Skills & Tools/rootcause-agent/samples/case2_code.py"
  ],
  "ground_truth": {
   "root_cause": "getUser 中 user 为 None 时未判空，直接访问 user.name 导致 NPE",
